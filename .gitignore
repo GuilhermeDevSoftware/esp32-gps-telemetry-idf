@@ -1,0 +1,18 @@
+# Dados e logs do Mosquitto
+mosquitto/data/
+mosquitto/log/
+
+# Dados internos do Node-RED
+nodered/data/
+
+# Banco de dados local
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Logs
+*.log
+
+# Arquivos temporários
+*.tmp
+.DS_Store
