@@ -1,3 +1,88 @@
+## Etapa 1 — Leitura bruta do GPS via UART
+
+Nesta etapa foi implementado o primeiro teste real do hardware do projeto de telemetria veicular.
+
+O objetivo foi validar a comunicação entre o ESP32 e o módulo GPS utilizando ESP-IDF, UART2 e monitor serial.
+
+### Configuração utilizada
+
+* Microcontrolador: ESP32
+* Framework: ESP-IDF
+* Ambiente: Linux/WSL2
+* Comunicação: UART2
+* Baud rate: 9600 bps
+* RX do ESP32: GPIO16
+* TX do ESP32: GPIO17
+
+### Ligações testadas
+
+| GPS | ESP32     |
+| --- | --------- |
+| VCC | 3.3V / 5V |
+| GND | GND       |
+| TX  | GPIO16    |
+| RX  | GPIO17    |
+
+### Resultado obtido
+
+O ESP32 recebeu corretamente frases NMEA enviadas pelo módulo GPS, confirmando que a comunicação UART estava funcional.
+
+Exemplo de saída recebida:
+
+```txt
+$GNGGA,,,,,,0,00,25.5,,,,,,*64
+$GNRMC,,V,,,,,,,,,,M*4E
+$GNVTG,,,,,,,,,M*2D
+```
+
+A comunicação entre ESP32 e GPS foi validada com sucesso.
+
+### Problema identificado no hardware
+
+Apesar da comunicação UART estar funcionando, o GPS não obteve fix de localização.
+
+Os campos recebidos indicaram:
+
+* `GNGGA ... 0,00`: sem fix GPS e nenhum satélite utilizado;
+* `GNRMC,,V`: dados inválidos de localização;
+* ausência de latitude, longitude e velocidade válidas.
+
+Após análise do hardware, foi identificado que o módulo GPS recebido não possuía antena, apesar do anúncio informar que acompanharia antena.
+
+Com isso, o problema foi isolado como uma limitação de hardware de recepção GPS, e não como falha de código, ligação ou configuração do ESP-IDF.
+
+### Diagnóstico da etapa
+
+Status da etapa:
+
+* ESP-IDF funcionando no WSL2;
+* USB do ESP32 funcionando no WSL via usbipd;
+* ESP32 gravado com sucesso;
+* UART2 funcionando;
+* GPS transmitindo frases NMEA;
+* ausência de fix causada pela falta de antena no módulo recebido.
+
+### Ação corretiva
+
+Foi adquirido um novo módulo GPS NEO-6M / GY-GPS6MV2 com suporte a 3.3V–5V e antena externa inclusa.
+
+Enquanto o novo hardware não chega, o desenvolvimento seguirá para a próxima etapa de software: criação do parser NMEA.
+
+## Próxima etapa — Parser NMEA
+
+A próxima etapa será transformar as frases NMEA recebidas em dados organizados para a telemetria.
+
+O parser deverá extrair:
+
+* status do GPS;
+* validade do sinal;
+* latitude;
+* longitude;
+* velocidade;
+* quantidade de satélites;
+* estado de fix GPS.
+
+Mesmo com o módulo atual sem antena, já é possível testar a detecção de dados inválidos. Quando o novo módulo com antena chegar, o mesmo código será utilizado para validar latitude, longitude e velocidade reais.
 # ESP32 GPS Telemetry IDF
 
 Sistema de telemetria veicular utilizando **ESP32**, **GPS GY-NEO6MV2**, **ESP-IDF**, **MQTT**, **Docker**, **Node-RED** e armazenamento offline.
