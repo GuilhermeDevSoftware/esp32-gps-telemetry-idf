@@ -6,3 +6,5 @@
 mosquitto/data/
 mosquitto/log/
 nodered/
+**/build/
+**/sdkconfig.old
