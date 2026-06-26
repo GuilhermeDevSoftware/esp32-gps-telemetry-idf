@@ -1,93 +1,10 @@
-## Etapa 1 — Leitura bruta do GPS via UART
-
-Nesta etapa foi implementado o primeiro teste real do hardware do projeto de telemetria veicular.
-
-O objetivo foi validar a comunicação entre o ESP32 e o módulo GPS utilizando ESP-IDF, UART2 e monitor serial.
-
-### Configuração utilizada
-
-* Microcontrolador: ESP32
-* Framework: ESP-IDF
-* Ambiente: Linux/WSL2
-* Comunicação: UART2
-* Baud rate: 9600 bps
-* RX do ESP32: GPIO16
-* TX do ESP32: GPIO17
-
-### Ligações testadas
-
-| GPS | ESP32     |
-| --- | --------- |
-| VCC | 3.3V / 5V |
-| GND | GND       |
-| TX  | GPIO16    |
-| RX  | GPIO17    |
-
-### Resultado obtido
-
-O ESP32 recebeu corretamente frases NMEA enviadas pelo módulo GPS, confirmando que a comunicação UART estava funcional.
-
-Exemplo de saída recebida:
-
-```txt
-$GNGGA,,,,,,0,00,25.5,,,,,,*64
-$GNRMC,,V,,,,,,,,,,M*4E
-$GNVTG,,,,,,,,,M*2D
-```
-
-A comunicação entre ESP32 e GPS foi validada com sucesso.
-
-### Problema identificado no hardware
-
-Apesar da comunicação UART estar funcionando, o GPS não obteve fix de localização.
-
-Os campos recebidos indicaram:
-
-* `GNGGA ... 0,00`: sem fix GPS e nenhum satélite utilizado;
-* `GNRMC,,V`: dados inválidos de localização;
-* ausência de latitude, longitude e velocidade válidas.
-
-Após análise do hardware, foi identificado que o módulo GPS recebido não possuía antena, apesar do anúncio informar que acompanharia antena.
-
-Com isso, o problema foi isolado como uma limitação de hardware de recepção GPS, e não como falha de código, ligação ou configuração do ESP-IDF.
-
-### Diagnóstico da etapa
-
-Status da etapa:
-
-* ESP-IDF funcionando no WSL2;
-* USB do ESP32 funcionando no WSL via usbipd;
-* ESP32 gravado com sucesso;
-* UART2 funcionando;
-* GPS transmitindo frases NMEA;
-* ausência de fix causada pela falta de antena no módulo recebido.
-
-### Ação corretiva
-
-Foi adquirido um novo módulo GPS NEO-6M / GY-GPS6MV2 com suporte a 3.3V–5V e antena externa inclusa.
-
-Enquanto o novo hardware não chega, o desenvolvimento seguirá para a próxima etapa de software: criação do parser NMEA.
-
-## Próxima etapa — Parser NMEA
-
-A próxima etapa será transformar as frases NMEA recebidas em dados organizados para a telemetria.
-
-O parser deverá extrair:
-
-* status do GPS;
-* validade do sinal;
-* latitude;
-* longitude;
-* velocidade;
-* quantidade de satélites;
-* estado de fix GPS.
-
-Mesmo com o módulo atual sem antena, já é possível testar a detecção de dados inválidos. Quando o novo módulo com antena chegar, o mesmo código será utilizado para validar latitude, longitude e velocidade reais.
 # ESP32 GPS Telemetry IDF
 
-Sistema de telemetria veicular utilizando **ESP32**, **GPS GY-NEO6MV2**, **ESP-IDF**, **MQTT**, **Docker**, **Node-RED** e armazenamento offline.
+Sistema de telemetria veicular utilizando **ESP32**, **GPS GY-NEO6MV2 / NEO-6M**, **ESP-IDF**, **MQTT**, **Docker**, **Node-RED** e armazenamento offline.
 
-O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados de localização e movimento de um veículo, transmitir os dados via MQTT para um servidor local e exibir informações em dashboard, mapa e banco de dados.
+O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados de localização e movimento de um veículo, transmitir os dados para um servidor local e futuramente exibir informações em dashboard, mapa e banco de dados.
+
+Este projeto está sendo desenvolvido com foco em práticas profissionais de sistemas embarcados, incluindo validação de comunicação com analisador lógico, organização modular do firmware, uso de Linux/WSL2, Docker, MQTT e documentação técnica por etapas.
 
 ---
 
@@ -95,14 +12,29 @@ O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar da
 
 **Em desenvolvimento**
 
-Etapa atual concluída:
+### Etapas já implementadas
 
 * Ambiente Linux com WSL2 configurado
-* Docker instalado e validado
+* Projeto versionado no GitHub
+* Docker configurado
 * Mosquitto MQTT rodando em container
 * Node-RED rodando em container
-* Comunicação MQTT testada com sucesso
+* Comunicação MQTT testada via terminal
 * Node-RED recebendo mensagens JSON via MQTT
+* Projeto ESP-IDF criado para teste de GPS via UART
+* ESP32 gravado com sucesso pelo WSL2 usando `usbipd`
+* GPS conectado ao ESP32 via UART2
+* Comunicação UART validada no ESP-IDF
+* Comunicação UART validada fisicamente com analisador lógico
+* Mensagens NMEA recebidas e documentadas
+
+### Etapa atual
+
+Validação da comunicação UART entre o módulo GPS e o ESP32 utilizando analisador lógico.
+
+### Próxima etapa
+
+Implementação do parser NMEA para interpretar as mensagens recebidas do GPS.
 
 ---
 
@@ -124,27 +56,63 @@ O sistema deverá permitir:
 
 ---
 
-## Arquitetura Planejada
+## Arquitetura Planejada do Sistema
 
 ```text
-ESP32 + GPS GY-NEO6MV2
-        |
-        | MQTT via Wi-Fi
-        v
-Mosquitto MQTT Broker
-        |
-        v
-Node-RED
-        |
-        +--> Dashboard
-        +--> Banco de dados
-        +--> Mapa
-        +--> Análise de telemetria
+ESP32 no veículo
+    |
+    +--> GPS GY-NEO6MV2 / NEO-6M
+    |
+    +--> Parser NMEA
+    |
+    +--> Cálculo de telemetria
+    |       - velocidade
+    |       - distância
+    |       - tempo parado
+    |       - tempo em movimento
+    |
+    +--> MQTT via Wi-Fi
+    |
+    +--> microSD para armazenamento offline
+            |
+            v
+Servidor local
+    |
+    +--> Mosquitto MQTT Broker
+    |
+    +--> Node-RED
+    |
+    +--> Dashboard
+    |
+    +--> Banco de dados
+    |
+    +--> Mapa
 ```
 
 ---
 
 ## Arquitetura Atual Implementada
+
+```text
+GPS GY-NEO6MV2
+    |
+    | UART 9600 bps
+    v
+ESP32 - UART2
+    |
+    | Monitor ESP-IDF
+    v
+Mensagens NMEA brutas
+
+
+GPS TX
+    |
+    +--> ESP32 GPIO16
+    |
+    +--> CH1 / D0 do analisador lógico
+```
+
+Infraestrutura local já implementada:
 
 ```text
 WSL2 Ubuntu
@@ -157,15 +125,16 @@ Docker Compose
     +--> Node-RED - porta 1880
 ```
 
-Nesta etapa, os dados ainda são simulados pelo terminal. O ESP32 será integrado nas próximas fases.
-
 ---
 
 ## Tecnologias Utilizadas
 
 * ESP32
 * ESP-IDF
-* GPS GY-NEO6MV2
+* GPS GY-NEO6MV2 / NEO-6M
+* UART
+* Analisador lógico 24 MHz / 8 canais
+* Saleae Logic 2
 * MQTT
 * Mosquitto
 * Node-RED
@@ -173,8 +142,9 @@ Nesta etapa, os dados ainda são simulados pelo terminal. O ESP32 será integrad
 * Docker Compose
 * WSL2 Ubuntu
 * Git e GitHub
-* SQLite
 * VSCode
+* SQLite, planejado
+* microSD, planejado
 
 ---
 
@@ -183,7 +153,17 @@ Nesta etapa, os dados ainda são simulados pelo terminal. O ESP32 será integrad
 ```text
 telemetria-gps/
 ├── database/
-├── docker-compose.yml
+├── docs/
+│   └── images/
+│       ├── gps_uart_saleae_logic.jpg
+│       └── gps_uart_espidf_monitor.jpg
+├── gps_uart_test/
+│   ├── CMakeLists.txt
+│   ├── main/
+│   │   ├── CMakeLists.txt
+│   │   └── main.c
+│   ├── sdkconfig
+│   └── sdkconfig.old
 ├── mosquitto/
 │   ├── config/
 │   │   └── mosquitto.conf
@@ -191,9 +171,12 @@ telemetria-gps/
 │   └── log/
 ├── nodered/
 │   └── data/
+├── docker-compose.yml
 ├── .gitignore
 └── README.md
 ```
+
+Observação: a pasta `build/` do ESP-IDF não deve ser versionada no GitHub.
 
 ---
 
@@ -279,11 +262,11 @@ log_dest file /mosquitto/log/mosquitto.log
 log_dest stdout
 ```
 
-Nesta fase inicial, o broker está permitindo conexão anônima para facilitar os testes. Em uma etapa futura, será adicionada autenticação com usuário e senha.
+Nesta fase inicial, o broker permite conexão anônima para facilitar os testes. Em uma etapa futura, poderá ser adicionada autenticação com usuário e senha.
 
 ---
 
-## Como Executar o Projeto
+## Como Executar a Infraestrutura Local
 
 Entrar na pasta do projeto:
 
@@ -396,37 +379,267 @@ Não deve ser usado `localhost` dentro do Node-RED para acessar o Mosquitto, poi
 
 ---
 
-## Etapas Concluídas
+# Firmware ESP-IDF — Teste UART GPS
 
-### Etapa 1 — Preparação do Ambiente Linux
+Foi criado um projeto ESP-IDF separado para validar a comunicação UART entre o ESP32 e o módulo GPS.
+
+Diretório:
+
+```text
+gps_uart_test/
+```
+
+## Configuração utilizada
+
+* Microcontrolador: ESP32
+* Framework: ESP-IDF
+* Ambiente: Linux/WSL2
+* Comunicação: UART2
+* Baud rate: 9600 bps
+* Formato: 8N1
+* RX do ESP32: GPIO16
+* TX do ESP32: GPIO17
+
+## Ligações entre GPS e ESP32
+
+| GPS | ESP32            |
+| --- | ---------------- |
+| VCC | 3.3V / 5V        |
+| GND | GND              |
+| TX  | GPIO16           |
+| RX  | GPIO17, opcional |
+
+Para leitura das mensagens NMEA, a ligação principal é:
+
+```text
+GPS TX -> ESP32 GPIO16
+GPS GND -> ESP32 GND
+```
+
+---
+
+## Como Compilar e Gravar o Teste UART
+
+Entrar na pasta do projeto:
+
+```bash
+cd ~/projetos/telemetria-gps/gps_uart_test
+```
+
+Carregar o ambiente ESP-IDF:
+
+```bash
+source ~/esp/esp-idf/export.sh
+```
+
+Definir o alvo:
+
+```bash
+idf.py set-target esp32
+```
+
+Compilar:
+
+```bash
+idf.py build
+```
+
+Gravar e abrir o monitor serial:
+
+```bash
+idf.py -p /dev/ttyUSB0 flash monitor
+```
+
+Para sair do monitor:
+
+```text
+CTRL + ]
+```
+
+---
+
+# Validação com Analisador Lógico
+
+Além da leitura pelo ESP32, a comunicação UART foi validada fisicamente com um analisador lógico 24 MHz / 8 canais.
+
+## Objetivo
+
+Validar o sinal elétrico e o protocolo UART antes da implementação do parser NMEA e antes do teste de campo com o GPS definitivo.
+
+Essa validação permite confirmar que:
+
+* O GPS está transmitindo dados pela UART
+* O baud rate está correto
+* O ESP32 está recebendo os mesmos dados
+* As mensagens seguem o padrão NMEA
+* A ausência de fix não é causada por erro de comunicação
+
+---
+
+## Ligações do Analisador Lógico
+
+O analisador foi conectado em paralelo no TX do GPS.
+
+| Sinal             | Ligação                  |
+| ----------------- | ------------------------ |
+| GPS TX            | ESP32 GPIO16             |
+| GPS TX            | CH1 do analisador lógico |
+| GPS GND           | GND do ESP32             |
+| GND do analisador | GND comum                |
+
+Representação:
+
+```text
+GPS TX
+   |
+   +---- ESP32 GPIO16
+   |
+   +---- CH1 analisador lógico
+
+
+GPS GND
+   |
+   +---- ESP32 GND
+   |
+   +---- GND analisador lógico
+```
+
+No software Saleae Logic 2, o canal físico CH1 foi identificado como:
+
+```text
+D0
+```
+
+---
+
+## Configuração no Saleae Logic 2
+
+Decoder utilizado:
+
+```text
+Async Serial
+```
+
+Configuração:
+
+```text
+Input Channel: D0
+Bit Rate: 9600
+Bits per Frame: 8
+Stop Bits: 1
+Parity: None
+Significant Bit: Least Significant Bit first
+Signal: Non-inverted
+```
+
+---
+
+## Captura com Analisador Lógico
+
+O analisador lógico capturou o sinal UART no canal D0 e decodificou corretamente as mensagens NMEA.
+
+![Captura UART GPS no Saleae Logic](docs/images/gps_uart_saleae_logic.jpg)
+
+---
+
+## Recepção no ESP32
+
+As mesmas mensagens capturadas pelo analisador lógico também foram recebidas pelo ESP32 via UART2 e exibidas no monitor serial do ESP-IDF.
+
+![Monitor ESP-IDF recebendo mensagens NMEA](docs/images/gps_uart_espidf_monitor.jpg)
+
+---
+
+## Mensagens NMEA Capturadas
+
+Exemplo de mensagens recebidas:
+
+```text
+$GNGGA,,,,,,0,00,25.5,,,,,,*64
+$GNRMC,,V,,,,,,,,,,M*4E
+$GNVTG,,,,,,,,,M*2D
+```
+
+---
+
+## Análise das Mensagens
+
+### Sentença GNGGA
+
+Exemplo:
+
+```text
+$GNGGA,,,,,,0,00,25.5,,,,,,*64
+```
+
+O campo `0` indica que o GPS está sem fix válido.
+
+O campo `00` indica que nenhum satélite está sendo utilizado na solução de posição.
+
+### Sentença GNRMC
+
+Exemplo:
+
+```text
+$GNRMC,,V,,,,,,,,,,M*4E
+```
+
+O campo `V` indica que os dados de navegação são inválidos.
+
+Quando o GPS possuir posição válida, esse campo deverá aparecer como `A`.
+
+### Sentença GNVTG
+
+Exemplo:
+
+```text
+$GNVTG,,,,,,,,,M*2D
+```
+
+Essa sentença é relacionada à direção e velocidade sobre o solo. Como não há fix válido no momento do teste, os campos de velocidade estão vazios.
+
+---
+
+## Resultado da Validação UART
+
+A comunicação UART entre o módulo GPS e o ESP32 foi validada com sucesso.
+
+Status da etapa:
+
+* ESP32 gravado com ESP-IDF
+* USB do ESP32 funcionando no WSL2 via `usbipd`
+* UART2 configurada em 9600 bps
+* GPS transmitindo mensagens NMEA
+* Analisador lógico capturando o sinal UART
+* Saleae Logic 2 decodificando Async Serial corretamente
+* ESP32 recebendo as mesmas mensagens via UART
+* Fix GPS ainda inválido devido à condição atual de recepção
+
+Conclusão:
+
+```text
+Comunicação UART validada.
+Fix GPS ainda inválido.
+Aguardando o módulo GPS com antena definitiva para teste de campo.
+```
+
+---
+
+# Etapas Concluídas
+
+## Etapa 1 — Preparação do Ambiente Linux
 
 * Instalação e configuração do WSL2
 * Criação do usuário Linux
 * Atualização do Ubuntu
-* Instalação de ferramentas básicas:
-
-  * Git
-  * Python
-  * SQLite
-  * Curl
-  * Wget
-  * Build-essential
+* Instalação de ferramentas básicas
+* Integração com VSCode
 
 Status: concluída.
 
 ---
 
-### Etapa 2 — Integração VSCode com WSL2
-
-* Projeto criado em `/home/guilherme/projetos/telemetria-gps`
-* Pasta aberta pelo VSCode usando WSL
-* Terminal Linux validado dentro do VSCode
-
-Status: concluída.
-
----
-
-### Etapa 3 — Instalação e Validação do Docker
+## Etapa 2 — Instalação e Validação do Docker
 
 * Docker Desktop instalado no Windows
 * Integração com Ubuntu WSL2 habilitada
@@ -446,7 +659,7 @@ Status: concluída.
 
 ---
 
-### Etapa 4 — Criação da Infraestrutura Docker
+## Etapa 3 — Infraestrutura Docker
 
 * Criado `docker-compose.yml`
 * Criadas pastas persistentes para Mosquitto, Node-RED e banco de dados
@@ -465,7 +678,7 @@ Status: concluída.
 
 ---
 
-### Etapa 5 — Teste de Comunicação MQTT
+## Etapa 4 — Teste de Comunicação MQTT
 
 * Teste de publicação e assinatura MQTT realizado dentro do container Mosquitto
 * Teste de envio JSON para o Node-RED
@@ -475,23 +688,117 @@ Status: concluída.
 
 ---
 
-## Próximas Etapas
+## Etapa 5 — Projeto ESP-IDF para Teste UART
 
-### Etapa 6 — Simulador de Telemetria GPS em Python
+* Projeto `gps_uart_test` criado
+* ESP32 configurado para UART2
+* RX em GPIO16
+* TX em GPIO17
+* Baud rate de 9600 bps
+* Firmware compilado e gravado no ESP32
 
-Criar um script Python para simular dados de GPS antes de integrar o ESP32 real.
-
-O simulador deverá publicar mensagens MQTT com:
-
-* Latitude
-* Longitude
-* Velocidade
-* Status do veículo
-* Timestamp
+Status: concluída.
 
 ---
 
-### Etapa 7 — Dashboard Inicial no Node-RED
+## Etapa 6 — Validação UART com GPS
+
+* GPS conectado ao ESP32 via UART
+* Mensagens NMEA recebidas no monitor serial
+* Comunicação entre GPS e ESP32 validada
+
+Status: concluída.
+
+---
+
+## Etapa 7 — Validação com Analisador Lógico
+
+* Analisador lógico conectado ao TX do GPS
+* GND comum entre ESP32, GPS e analisador
+* Sinal UART capturado no canal D0
+* Decoder Async Serial configurado em 9600 bps
+* Mensagens NMEA visualizadas no Saleae Logic 2
+* Mensagens comparadas com o monitor do ESP-IDF
+
+Status: concluída.
+
+---
+
+# Próximas Etapas
+
+## Etapa 8 — Parser NMEA
+
+Implementar o parser responsável por transformar as frases NMEA em dados estruturados.
+
+O parser deverá extrair:
+
+* Tipo da sentença
+* Status do GPS
+* Validade do sinal
+* Latitude
+* Longitude
+* Velocidade
+* Quantidade de satélites
+* Estado do fix GPS
+
+Mesmo com o módulo atual sem fix válido, já é possível testar a detecção de dados inválidos. Quando o novo módulo com antena chegar, o mesmo parser será utilizado para validar latitude, longitude e velocidade reais.
+
+---
+
+## Etapa 9 — Estrutura Modular do Firmware
+
+Organizar o firmware em módulos separados:
+
+```text
+main/
+├── app_main.c
+├── gps_uart.c
+├── gps_uart.h
+├── nmea_parser.c
+├── nmea_parser.h
+├── gps_data.c
+└── gps_data.h
+```
+
+Responsabilidades planejadas:
+
+```text
+gps_uart.c
+- Inicializar a UART
+- Ler bytes do GPS
+- Montar linhas NMEA brutas
+
+nmea_parser.c
+- Receber uma linha NMEA
+- Identificar sentenças GNGGA, GNRMC e GNVTG
+- Extrair campos relevantes
+- Validar dados
+
+gps_data.c
+- Armazenar dados tratados
+- Informar fix válido ou inválido
+- Disponibilizar latitude, longitude, velocidade e satélites
+
+app_main.c
+- Inicializar o sistema
+- Criar tasks
+- Integrar os módulos
+```
+
+---
+
+## Etapa 10 — Integração MQTT com ESP32
+
+Criar firmware para:
+
+* Conectar o ESP32 ao Wi-Fi
+* Publicar dados GPS em JSON
+* Enviar mensagens para o broker Mosquitto
+* Integrar com o Node-RED
+
+---
+
+## Etapa 11 — Dashboard Inicial no Node-RED
 
 Criar uma interface para visualizar:
 
@@ -500,55 +807,55 @@ Criar uma interface para visualizar:
 * Última latitude
 * Última longitude
 * Indicador de comunicação MQTT
+* Estado do fix GPS
+* Quantidade de satélites
 
 ---
 
-### Etapa 8 — Banco de Dados
+## Etapa 12 — Banco de Dados
 
 Adicionar armazenamento dos dados recebidos.
 
-Inicialmente planejado:
+Planejamento inicial:
 
 * SQLite
 * Tabela de leituras GPS
 * Registro de data/hora
 * Registro de velocidade
-* Registro de latitude e longitude
+* Registro de latitude
+* Registro de longitude
+* Registro de status do GPS
 
 ---
 
-### Etapa 9 — Integração com ESP32
-
-Criar firmware em ESP-IDF para:
-
-* Conectar o ESP32 ao Wi-Fi
-* Ler dados do GPS via UART
-* Interpretar dados NMEA
-* Publicar JSON via MQTT
-
----
-
-### Etapa 10 — Armazenamento Offline
+## Etapa 13 — Armazenamento Offline em microSD
 
 Adicionar microSD ao ESP32 para:
 
 * Salvar dados localmente quando não houver conexão
 * Reenviar dados quando a rede voltar
-* Evitar perda de telemetria
+* Evitar perda de telemetria durante o uso no veículo
 
 ---
 
-## Comandos Git Utilizados
+## Comandos Git Recomendados
 
-Inicialização do repositório:
+Adicionar alterações:
 
 ```bash
-git init
-git add .
-git commit -m "Configura ambiente Docker com Mosquitto e Node-RED"
-git branch -M main
-git remote add origin https://github.com/GuilhermeDevSoftware/esp32-gps-telemetry-idf.git
-git push -u origin main
+git add README.md docs/images gps_uart_test .gitignore
+```
+
+Criar commit:
+
+```bash
+git commit -m "valida uart do gps com analisador logico"
+```
+
+Enviar para o GitHub:
+
+```bash
+git push
 ```
 
 ---
@@ -568,4 +875,4 @@ Projeto desenvolvido com foco em aprendizado e portfólio profissional nas área
 * Linux
 * Docker
 * Telemetria veicular
-# esp32-gps-telemetry-idf
+* Validação de hardware com analisador lógico
