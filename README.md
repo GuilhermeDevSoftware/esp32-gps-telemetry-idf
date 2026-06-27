@@ -2,14 +2,17 @@
 
 Sistema de telemetria veicular utilizando **ESP32**, **GPS GY-NEO6MV2 / NEO-6M**, **ESP-IDF**, **MQTT**, **Docker**, **Node-RED** e armazenamento offline.
 
-O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados de localização e movimento de um veículo, interpretar os dados do GPS, transmitir informações para um servidor local e futuramente exibir esses dados em dashboard, mapa e banco de dados.
+O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados de localização e movimento de um veículo, interpretar dados GPS em formato NMEA, transmitir informações para um servidor local e futuramente exibir esses dados em dashboard, mapa e banco de dados.
 
-Este projeto está sendo desenvolvido com foco em práticas profissionais de sistemas embarcados, incluindo:
+Este projeto está sendo desenvolvido com foco em práticas profissionais de **sistemas embarcados**, **firmware**, **eletrônica aplicada** e **telemetria IoT**, incluindo:
 
 * desenvolvimento com ESP-IDF;
 * uso de Linux/WSL2;
 * validação de comunicação UART;
 * análise de sinais com analisador lógico;
+* parser NMEA;
+* validação de checksum;
+* diagnóstico técnico do GPS;
 * organização modular do firmware;
 * infraestrutura local com Docker;
 * comunicação MQTT;
@@ -21,7 +24,36 @@ Este projeto está sendo desenvolvido com foco em práticas profissionais de sis
 
 **Em desenvolvimento**
 
-### Etapas já implementadas
+### Status atual
+
+A comunicação entre o **GPS GY-NEO6MV2 / NEO-6M** e o **ESP32** já foi validada por UART no ESP-IDF.
+
+Também foi implementado um diagnóstico técnico do GPS, exibindo no monitor serial:
+
+* quantidade de mensagens `GGA`;
+* quantidade de mensagens `RMC`;
+* quantidade de mensagens `VTG`;
+* quantidade de mensagens ignoradas;
+* quantidade de checksums inválidos;
+* quantidade de mensagens válidas;
+* status do GPS;
+* quantidade de satélites;
+* qualidade do fix;
+* tempo desde a inicialização;
+* última mensagem NMEA válida recebida.
+
+Como o módulo GPS está temporariamente sem antena, o comportamento atual esperado é:
+
+* receber mensagens NMEA;
+* validar checksum corretamente;
+* identificar `satellites = 0`;
+* identificar `fix_quality = 0`;
+* identificar status `V` nas mensagens RMC;
+* exibir o estado `AGUARDANDO SATELITES`.
+
+---
+
+## Etapas já implementadas
 
 * Ambiente Linux com WSL2 configurado;
 * Projeto versionado no GitHub;
@@ -37,34 +69,10 @@ Este projeto está sendo desenvolvido com foco em práticas profissionais de sis
 * Comunicação UART validada no ESP-IDF;
 * Comunicação UART validada fisicamente com analisador lógico;
 * Mensagens NMEA recebidas e documentadas;
-* Parser NMEA implementado;
+* Parser NMEA inicial implementado;
+* Validação de checksum implementada;
+* Diagnóstico técnico do GPS implementado;
 * Detecção de GPS sem fix funcionando corretamente.
-
-### Etapa atual
-
-Implementação e validação inicial do **parser NMEA**.
-
-O ESP32 já recebe mensagens NMEA do GPS, interpreta sentenças dos tipos `GGA` e `RMC` e identifica corretamente quando o GPS ainda está sem fix.
-
-Como o módulo está momentaneamente sem antena, o comportamento esperado é:
-
-* receber mensagens NMEA;
-* detectar `fix_quality = 0`;
-* detectar `satellites = 0`;
-* detectar status `V` nas mensagens RMC;
-* exibir no monitor que o GPS ainda está sem fix.
-
-### Próxima etapa
-
-Implementar um **diagnóstico técnico do GPS**, com contadores e status mais detalhado, incluindo:
-
-* quantidade de mensagens `GGA` recebidas;
-* quantidade de mensagens `RMC` recebidas;
-* quantidade de mensagens `VTG` recebidas;
-* mensagens ignoradas;
-* mensagens com checksum inválido;
-* tempo de execução;
-* último status válido do GPS.
 
 ---
 
@@ -74,15 +82,15 @@ Criar um sistema de telemetria veicular onde um ESP32 instalado no veículo lê 
 
 O sistema deverá permitir:
 
-* Monitorar latitude e longitude;
-* Calcular velocidade instantânea;
-* Registrar velocidade máxima;
-* Calcular velocidade média;
-* Medir distância percorrida;
-* Identificar tempo parado e tempo em movimento;
-* Exibir rota em mapa;
-* Armazenar dados offline em microSD quando não houver rede;
-* Reenviar dados quando a conexão for restabelecida.
+* monitorar latitude e longitude;
+* calcular velocidade instantânea;
+* registrar velocidade máxima;
+* calcular velocidade média;
+* medir distância percorrida;
+* identificar tempo parado e tempo em movimento;
+* exibir rota em mapa;
+* armazenar dados offline em microSD quando não houver rede;
+* reenviar dados quando a conexão for restabelecida.
 
 ---
 
@@ -94,6 +102,8 @@ ESP32 no veículo
     +--> GPS GY-NEO6MV2 / NEO-6M
     |
     +--> Parser NMEA
+    |
+    +--> Diagnóstico GPS
     |
     +--> Cálculo de telemetria
     |       - velocidade instantânea
@@ -137,11 +147,20 @@ ESP32 - UART2
 Montagem de linhas NMEA
     |
     v
-Parser NMEA
+Validação de checksum
     |
-    +--> GGA: fix, satélites, HDOP e altitude
+    v
+Diagnóstico técnico GPS
     |
-    +--> RMC: validade, latitude, longitude, velocidade e data
+    +--> Contador GGA
+    +--> Contador RMC
+    +--> Contador VTG
+    +--> Contador de mensagens válidas
+    +--> Contador de checksums inválidos
+    +--> Contador de mensagens ignoradas
+    +--> Status do fix
+    +--> Tempo desde inicialização
+    +--> Última mensagem válida
     |
     v
 Monitor ESP-IDF
@@ -185,6 +204,7 @@ Docker Compose
 * GPS GY-NEO6MV2 / NEO-6M;
 * UART;
 * Parser NMEA;
+* Validação de checksum;
 * Analisador lógico 24 MHz / 8 canais;
 * Saleae Logic 2;
 * MQTT;
@@ -213,9 +233,9 @@ telemetria-gps/
 │   ├── CMakeLists.txt
 │   ├── main/
 │   │   ├── CMakeLists.txt
-│   │   ├── gps_uart_test.c
-│   │   ├── gps_parser.c
-│   │   └── gps_parser.h
+│   │   ├── main.c
+│   │   ├── gps_diagnostic.c
+│   │   └── gps_diagnostic.h
 │   ├── sdkconfig
 │   └── sdkconfig.old
 ├── mosquitto/
@@ -474,9 +494,9 @@ Durante os testes, houve um erro de ligação inicial no GND, que foi corrigido.
 
 ---
 
-## Como Compilar e Gravar o Teste UART
+## Como Compilar e Gravar o Firmware
 
-Entrar na pasta do projeto:
+Entrar na pasta do projeto ESP-IDF:
 
 ```bash
 cd ~/projetos/telemetria-gps/gps_uart_test
@@ -536,11 +556,11 @@ Validar o sinal elétrico e o protocolo UART antes da implementação das próxi
 
 Essa validação permite confirmar que:
 
-* O GPS está transmitindo dados pela UART;
-* O baud rate está correto;
-* O ESP32 está recebendo os mesmos dados;
-* As mensagens seguem o padrão NMEA;
-* A ausência de fix não é causada por erro de comunicação.
+* o GPS está transmitindo dados pela UART;
+* o baud rate está correto;
+* o ESP32 está recebendo os mesmos dados;
+* as mensagens seguem o padrão NMEA;
+* a ausência de fix não é causada por erro de comunicação.
 
 ---
 
@@ -617,38 +637,33 @@ As mesmas mensagens capturadas pelo analisador lógico também foram recebidas p
 
 ---
 
-# Parser NMEA
+# Parser NMEA e Diagnóstico Técnico
 
-Nesta etapa foi implementado um parser NMEA para transformar as linhas recebidas do GPS em dados estruturados.
+Nesta etapa foi implementada uma camada de diagnóstico para acompanhar a qualidade das mensagens NMEA recebidas pelo ESP32.
 
 ## Arquivos implementados
 
 ```text
-main/
-├── gps_uart_test.c
-├── gps_parser.c
-└── gps_parser.h
+gps_uart_test/main/
+├── main.c
+├── gps_diagnostic.c
+└── gps_diagnostic.h
 ```
 
-O arquivo `gps_parser.c` é responsável por interpretar as sentenças NMEA, enquanto o arquivo `gps_parser.h` define a estrutura de dados utilizada pelo firmware.
+O arquivo `gps_diagnostic.c` é responsável por:
 
-## Dados extraídos
+* validar checksum NMEA;
+* identificar o tipo da sentença;
+* contar mensagens recebidas por tipo;
+* armazenar a última mensagem válida;
+* atualizar o status do GPS;
+* imprimir o diagnóstico técnico no monitor ESP-IDF.
 
-O parser foi preparado para extrair:
+O arquivo `gps_diagnostic.h` define a estrutura de dados do diagnóstico e os estados possíveis do GPS.
 
-* status de fix;
-* latitude;
-* longitude;
-* velocidade em km/h;
-* curso em graus;
-* horário UTC;
-* data;
-* quantidade de satélites;
-* qualidade do fix;
-* HDOP;
-* altitude.
+---
 
-## Sentenças tratadas
+## Sentenças monitoradas
 
 ### GGA
 
@@ -666,7 +681,7 @@ Exemplo recebido:
 $GNGGA,,,,,,0,00,25.5,,,,,,*64
 ```
 
-Interpretação:
+Interpretação atual:
 
 ```text
 Fix quality: 0
@@ -675,6 +690,8 @@ HDOP: 25.5
 ```
 
 O valor `fix_quality = 0` indica que o GPS ainda não possui posição válida.
+
+---
 
 ### RMC
 
@@ -693,7 +710,7 @@ Exemplo recebido:
 $GNRMC,,V,,,,,,,,,,M*4E
 ```
 
-Interpretação:
+Interpretação atual:
 
 ```text
 Status: V
@@ -704,6 +721,8 @@ GPS sem fix
 O campo `V` indica que os dados de navegação ainda não são válidos.
 
 Quando o GPS possuir fix, esse campo deverá aparecer como `A`.
+
+---
 
 ### VTG
 
@@ -719,18 +738,65 @@ Como ainda não há fix válido, os campos de velocidade aparecem vazios.
 
 ---
 
+### GSA
+
+A sentença `GSA` pode indicar se o GPS possui fix 2D ou 3D.
+
+O firmware já está preparado para ler essa sentença caso o módulo passe a enviá-la.
+
+Status possíveis considerados:
+
+```text
+1 - Sem fix
+2 - Fix 2D
+3 - Fix 3D
+```
+
+No teste atual, o módulo ainda não enviou mensagens `GSA`.
+
+---
+
+## Diagnóstico implementado
+
+O diagnóstico técnico exibe:
+
+* tempo desde a inicialização;
+* status do GPS;
+* contador de mensagens `GGA`;
+* contador de mensagens `RMC`;
+* contador de mensagens `VTG`;
+* contador de mensagens `GSA`;
+* contador de mensagens ignoradas;
+* contador de checksums inválidos;
+* contador de mensagens válidas;
+* quantidade de satélites;
+* qualidade do fix;
+* tipo de fix informado por GSA;
+* status da sentença RMC;
+* horário UTC;
+* última mensagem válida recebida.
+
+---
+
 ## Saída Atual do Firmware
 
 Exemplo real obtido no monitor do ESP-IDF:
 
 ```text
-W (3329) GPS_APP: GPS sem fix ainda
-W (3329) GPS_APP: Satélites: 0 | Qualidade fix: 0 | UTC:
-I (3539) GPS_APP: NMEA: $GNVTG,,,,,,,,,M*2D
-I (5079) GPS_APP: NMEA: $GNGGA,,,,,,0,00,25.5,,,,,,*64
-I (5329) GPS_APP: NMEA: $GNRMC,,V,,,,,,,,,,M*4E
-I (5539) GPS_APP: NMEA: $GNVTG,,,,,,,,,M*2D
-I (7079) GPS_APP: NMEA: $GNGGA,,,,,,0,00,25.5,,,,,,*64
+I (6338) GPS_APP: ================ DIAGNOSTICO GPS ================
+I (6338) GPS_APP: Tempo desde inicializacao: 6 s
+I (6338) GPS_APP: Status GPS: AGUARDANDO SATELITES
+I (6338) GPS_APP: Mensagens GGA: 3
+I (6338) GPS_APP: Mensagens RMC: 3
+I (6348) GPS_APP: Mensagens VTG: 3
+I (6348) GPS_APP: Mensagens GSA: 0
+I (6348) GPS_APP: Mensagens ignoradas: 0
+I (6348) GPS_APP: Checksums invalidos: 0
+I (6358) GPS_APP: Mensagens validas: 9
+I (6358) GPS_APP: Satelites: 0 | GGA fix quality: 0 | GSA fix type: 1 | RMC: V
+I (6368) GPS_APP: UTC: --
+I (6368) GPS_APP: Ultima mensagem valida: $GNVTG,,,,,,,,,M*2D
+I (6378) GPS_APP: =================================================
 ```
 
 Essa saída confirma que:
@@ -738,9 +804,31 @@ Essa saída confirma que:
 * o ESP32 está recebendo dados do GPS;
 * o baud rate está correto;
 * as linhas NMEA estão sendo montadas corretamente;
-* o parser reconhece mensagens `GGA` e `RMC`;
-* o sistema identifica corretamente que ainda não há fix válido;
-* o firmware continua estável, sem reinicializações.
+* as mensagens estão passando pela validação de checksum;
+* não há mensagens corrompidas no teste atual;
+* o firmware identifica corretamente que o GPS ainda está aguardando satélites;
+* a ausência de fix é compatível com o teste atual sem antena.
+
+---
+
+## Status do GPS no Firmware
+
+O firmware trabalha com os seguintes estados:
+
+```text
+AGUARDANDO SATELITES
+SEM FIX
+FIX 2D
+FIX 3D
+```
+
+No estado atual do projeto, o status exibido é:
+
+```text
+AGUARDANDO SATELITES
+```
+
+Isso é esperado porque o GPS está sem antena e ainda não recebeu sinal suficiente dos satélites.
 
 ---
 
@@ -844,17 +932,32 @@ Status: concluída.
 
 ---
 
-## Etapa 8 — Parser NMEA
+## Etapa 8 — Parser NMEA Inicial
 
-* Criado arquivo `gps_parser.h`;
-* Criado arquivo `gps_parser.c`;
-* Estrutura `gps_data_t` implementada;
-* Parser para sentenças `GGA` implementado;
-* Parser para sentenças `RMC` implementado;
-* Conversão de coordenadas NMEA para decimal preparada;
-* Conversão de velocidade de nós para km/h preparada;
-* Validação de checksum implementada;
-* Detecção de GPS sem fix funcionando.
+* Leitura de sentenças NMEA;
+* Identificação de mensagens `GGA`;
+* Identificação de mensagens `RMC`;
+* Identificação de mensagens `VTG`;
+* Detecção de GPS sem fix;
+* Preparação para extração de dados de posição, velocidade e horário.
+
+Status: concluída.
+
+---
+
+## Etapa 9 — Diagnóstico Técnico do GPS
+
+* Contador de mensagens `GGA`;
+* Contador de mensagens `RMC`;
+* Contador de mensagens `VTG`;
+* Contador de mensagens `GSA`;
+* Contador de mensagens ignoradas;
+* Contador de checksums inválidos;
+* Contador de mensagens válidas;
+* Status textual do GPS;
+* Tempo desde a inicialização;
+* Última sentença NMEA válida recebida;
+* Diagnóstico periódico no monitor serial.
 
 Status: concluída.
 
@@ -862,24 +965,37 @@ Status: concluída.
 
 # Próximas Etapas
 
-## Etapa 9 — Diagnóstico Técnico do GPS
+## Etapa 10 — Teste com Antena GPS
 
-Adicionar contadores e informações técnicas para acompanhar a qualidade da comunicação com o GPS.
+Validar o funcionamento do GPS com antena instalada.
 
-Planejamento:
+Objetivos:
 
-* Contador de mensagens `GGA`;
-* Contador de mensagens `RMC`;
-* Contador de mensagens `VTG`;
-* Contador de mensagens ignoradas;
-* Contador de checksums inválidos;
-* Tempo desde a inicialização;
-* Última sentença NMEA recebida;
-* Status textual do GPS: `SEM FIX`, `COM FIX`, `AGUARDANDO SATÉLITES`.
+* verificar aumento na quantidade de satélites;
+* verificar alteração do status de `AGUARDANDO SATELITES` para `FIX 2D` ou `FIX 3D`;
+* confirmar recebimento de horário UTC;
+* confirmar recebimento de latitude e longitude;
+* confirmar campos válidos nas sentenças `GGA` e `RMC`;
+* documentar os logs reais com fix válido.
 
 ---
 
-## Etapa 10 — Organização Modular do Firmware
+## Etapa 11 — Extração de Latitude, Longitude e Velocidade
+
+Implementar o tratamento completo dos dados úteis para telemetria.
+
+Planejamento:
+
+* converter latitude NMEA para decimal;
+* converter longitude NMEA para decimal;
+* converter velocidade de nós para km/h;
+* armazenar último ponto válido;
+* exibir latitude e longitude no monitor;
+* diferenciar dados válidos e inválidos.
+
+---
+
+## Etapa 12 — Organização Modular do Firmware
 
 Separar melhor as responsabilidades do firmware.
 
@@ -923,58 +1039,58 @@ app_main.c
 
 ---
 
-## Etapa 11 — Integração MQTT com ESP32
+## Etapa 13 — Integração MQTT com ESP32
 
 Criar firmware para:
 
-* Conectar o ESP32 ao Wi-Fi;
-* Publicar dados GPS em JSON;
-* Enviar mensagens para o broker Mosquitto;
-* Integrar com o Node-RED.
+* conectar o ESP32 ao Wi-Fi;
+* publicar dados GPS em JSON;
+* enviar mensagens para o broker Mosquitto;
+* integrar com o Node-RED.
 
 ---
 
-## Etapa 12 — Dashboard Inicial no Node-RED
+## Etapa 14 — Dashboard Inicial no Node-RED
 
 Criar uma interface para visualizar:
 
-* Velocidade atual;
-* Status do veículo;
-* Última latitude;
-* Última longitude;
-* Indicador de comunicação MQTT;
-* Estado do fix GPS;
-* Quantidade de satélites.
+* velocidade atual;
+* status do veículo;
+* última latitude;
+* última longitude;
+* indicador de comunicação MQTT;
+* estado do fix GPS;
+* quantidade de satélites.
 
 ---
 
-## Etapa 13 — Banco de Dados
+## Etapa 15 — Banco de Dados
 
 Adicionar armazenamento dos dados recebidos.
 
 Planejamento inicial:
 
 * SQLite;
-* Tabela de leituras GPS;
-* Registro de data/hora;
-* Registro de velocidade;
-* Registro de latitude;
-* Registro de longitude;
-* Registro de status do GPS.
+* tabela de leituras GPS;
+* registro de data/hora;
+* registro de velocidade;
+* registro de latitude;
+* registro de longitude;
+* registro de status do GPS.
 
 ---
 
-## Etapa 14 — Armazenamento Offline em microSD
+## Etapa 16 — Armazenamento Offline em microSD
 
 Adicionar microSD ao ESP32 para:
 
-* Salvar dados localmente quando não houver conexão;
-* Reenviar dados quando a rede voltar;
-* Evitar perda de telemetria durante o uso no veículo.
+* salvar dados localmente quando não houver conexão;
+* reenviar dados quando a rede voltar;
+* evitar perda de telemetria durante o uso no veículo.
 
 ---
 
-## Comandos Git Recomendados
+# Comandos Git Recomendados
 
 Verificar alterações:
 
@@ -991,7 +1107,7 @@ git add README.md gps_uart_test docs/images .gitignore
 Criar commit:
 
 ```bash
-git commit -m "documenta parser nmea e leitura gps sem fix"
+git commit -m "Documenta diagnostico tecnico do GPS"
 ```
 
 Enviar para o GitHub:
@@ -1002,13 +1118,33 @@ git push
 
 ---
 
-## Autor
+# Observações Técnicas
+
+Durante esta etapa, o GPS ainda está sem antena. Portanto, a ausência de fix é esperada.
+
+Mesmo sem fix válido, a etapa atual comprova pontos importantes do sistema embarcado:
+
+* comunicação UART funcional;
+* alimentação e GND corretos;
+* baud rate correto;
+* recepção de sentenças NMEA;
+* validação de checksum funcionando;
+* ausência de mensagens corrompidas no teste atual;
+* firmware estável;
+* diagnóstico técnico periódico implementado.
+
+A validação com antena será necessária para confirmar os dados reais de posicionamento, como latitude, longitude, horário UTC, velocidade e tipo de fix.
+
+---
+
+# Autor
 
 Guilherme Costa
 
 Projeto desenvolvido com foco em aprendizado e portfólio profissional nas áreas de:
 
 * Sistemas embarcados;
+* Firmware;
 * ESP32;
 * ESP-IDF;
 * IoT;
