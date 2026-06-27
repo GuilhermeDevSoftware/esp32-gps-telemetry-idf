@@ -5,28 +5,32 @@
 #include "freertos/task.h"
 
 #include "driver/uart.h"
-#include "esp_log.h"
+#include "driver/gpio.h"
 
-#include "gps_parser.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+
+#include "gps_diagnostic.h"
 
 #define GPS_UART_PORT UART_NUM_2
+#define GPS_UART_BAUD_RATE 9600
 
-#define GPS_TX_PIN 17
-#define GPS_RX_PIN 16
+#define GPS_RX_PIN GPIO_NUM_16
+#define GPS_TX_PIN GPIO_NUM_17
 
-#define GPS_BAUD_RATE 9600
+#define UART_BUFFER_SIZE 1024
+#define GPS_LINE_BUFFER_SIZE 180
 
-#define GPS_BUFFER_SIZE 1024
-#define GPS_LINE_SIZE 128
+#define GPS_DIAGNOSTIC_INTERVAL_US 3000000ULL
 
 static const char *TAG = "GPS_APP";
 
-static gps_data_t gps_data;
+static gps_diagnostic_t gps_diag;
 
 static void gps_uart_init(void)
 {
-    const uart_config_t uart_config = {
-        .baud_rate = GPS_BAUD_RATE,
+    uart_config_t uart_config = {
+        .baud_rate = GPS_UART_BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -34,126 +38,82 @@ static void gps_uart_init(void)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    ESP_ERROR_CHECK(uart_driver_install(
-        GPS_UART_PORT,
-        GPS_BUFFER_SIZE,
-        0,
-        0,
-        NULL,
-        0
-    ));
-
+    ESP_ERROR_CHECK(uart_driver_install(GPS_UART_PORT, UART_BUFFER_SIZE * 2, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(GPS_UART_PORT, &uart_config));
-
-    ESP_ERROR_CHECK(uart_set_pin(
-        GPS_UART_PORT,
-        GPS_TX_PIN,
-        GPS_RX_PIN,
-        UART_PIN_NO_CHANGE,
-        UART_PIN_NO_CHANGE
-    ));
+    ESP_ERROR_CHECK(uart_set_pin(GPS_UART_PORT, GPS_TX_PIN, GPS_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     ESP_LOGI(TAG, "UART GPS inicializada");
-    ESP_LOGI(TAG, "GPS RX ESP32: GPIO %d", GPS_RX_PIN);
-    ESP_LOGI(TAG, "GPS TX ESP32: GPIO %d", GPS_TX_PIN);
-    ESP_LOGI(TAG, "Baud rate: %d", GPS_BAUD_RATE);
-}
-
-static void print_gps_status(void)
-{
-    if (gps_data.valid_fix)
-    {
-        ESP_LOGI(TAG, "========== GPS COM FIX ==========");
-        ESP_LOGI(TAG, "Latitude: %.6f", gps_data.latitude);
-        ESP_LOGI(TAG, "Longitude: %.6f", gps_data.longitude);
-        ESP_LOGI(TAG, "Velocidade: %.2f km/h", gps_data.speed_kmh);
-        ESP_LOGI(TAG, "Curso: %.2f graus", gps_data.course_deg);
-        ESP_LOGI(TAG, "Satélites: %d", gps_data.satellites);
-        ESP_LOGI(TAG, "Qualidade fix: %d", gps_data.fix_quality);
-        ESP_LOGI(TAG, "HDOP: %.2f", gps_data.hdop);
-        ESP_LOGI(TAG, "Altitude: %.2f m", gps_data.altitude_m);
-        ESP_LOGI(TAG, "UTC: %s", gps_data.utc_time);
-        ESP_LOGI(TAG, "Data: %s", gps_data.date);
-        ESP_LOGI(TAG, "=================================");
-    }
-    else
-    {
-        ESP_LOGW(TAG, "GPS sem fix ainda");
-        ESP_LOGW(TAG, "Satélites: %d | Qualidade fix: %d | UTC: %s",
-                 gps_data.satellites,
-                 gps_data.fix_quality,
-                 gps_data.utc_time);
-    }
+    ESP_LOGI(TAG, "Baud rate: %d", GPS_UART_BAUD_RATE);
+    ESP_LOGI(TAG, "RX ESP32: GPIO %d", GPS_RX_PIN);
+    ESP_LOGI(TAG, "TX ESP32: GPIO %d", GPS_TX_PIN);
 }
 
 static void gps_task(void *pvParameters)
 {
-    uint8_t byte;
-    char line[GPS_LINE_SIZE];
+    uint8_t uart_data[128];
+
+    char line_buffer[GPS_LINE_BUFFER_SIZE];
     int line_index = 0;
 
-    TickType_t last_status_time = xTaskGetTickCount();
+    int64_t last_diagnostic_time = esp_timer_get_time();
 
     while (1)
     {
-        int len = uart_read_bytes(
+        int length = uart_read_bytes(
             GPS_UART_PORT,
-            &byte,
-            1,
-            pdMS_TO_TICKS(100)
-        );
+            uart_data,
+            sizeof(uart_data),
+            pdMS_TO_TICKS(200));
 
-        if (len > 0)
+        if (length > 0)
         {
-            if (byte == '\n')
+            for (int i = 0; i < length; i++)
             {
-                line[line_index] = '\0';
+                char c = (char)uart_data[i];
 
-                if (line_index > 0)
+                if (c == '\n')
                 {
-                    ESP_LOGI(TAG, "NMEA: %s", line);
-
-                    bool parsed = gps_parse_nmea_sentence(line, &gps_data);
-
-                    if (parsed)
+                    if (line_index > 0)
                     {
-                        TickType_t now = xTaskGetTickCount();
+                        line_buffer[line_index] = '\0';
 
-                        if ((now - last_status_time) >= pdMS_TO_TICKS(3000))
+                        if (line_buffer[0] == '$')
                         {
-                            print_gps_status();
-                            last_status_time = now;
+                            gps_diagnostic_process_line(&gps_diag, line_buffer);
                         }
+
+                        line_index = 0;
                     }
                 }
-
-                line_index = 0;
-                memset(line, 0, sizeof(line));
-            }
-            else
-            {
-                if (line_index < GPS_LINE_SIZE - 1)
+                else if (c != '\r')
                 {
-                    line[line_index++] = (char)byte;
-                }
-                else
-                {
-                    line_index = 0;
-                    memset(line, 0, sizeof(line));
-                    ESP_LOGW(TAG, "Linha NMEA muito grande. Buffer reiniciado.");
+                    if (line_index < GPS_LINE_BUFFER_SIZE - 1)
+                    {
+                        line_buffer[line_index++] = c;
+                    }
+                    else
+                    {
+                        line_index = 0;
+                    }
                 }
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        int64_t now = esp_timer_get_time();
+
+        if ((now - last_diagnostic_time) >= GPS_DIAGNOSTIC_INTERVAL_US)
+        {
+            gps_diagnostic_print(&gps_diag, TAG);
+            last_diagnostic_time = now;
+        }
     }
 }
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Iniciando projeto de telemetria GPS");
+    ESP_LOGI(TAG, "Iniciando Etapa 3 - Diagnostico tecnico do GPS");
 
-    gps_data_init(&gps_data);
+    gps_diagnostic_init(&gps_diag);
     gps_uart_init();
 
     xTaskCreate(
@@ -162,6 +122,5 @@ void app_main(void)
         4096,
         NULL,
         5,
-        NULL
-    );
+        NULL);
 }
