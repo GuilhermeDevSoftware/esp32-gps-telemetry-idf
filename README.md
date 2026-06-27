@@ -2,9 +2,18 @@
 
 Sistema de telemetria veicular utilizando **ESP32**, **GPS GY-NEO6MV2 / NEO-6M**, **ESP-IDF**, **MQTT**, **Docker**, **Node-RED** e armazenamento offline.
 
-O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados de localização e movimento de um veículo, transmitir os dados para um servidor local e futuramente exibir informações em dashboard, mapa e banco de dados.
+O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados de localização e movimento de um veículo, interpretar os dados do GPS, transmitir informações para um servidor local e futuramente exibir esses dados em dashboard, mapa e banco de dados.
 
-Este projeto está sendo desenvolvido com foco em práticas profissionais de sistemas embarcados, incluindo validação de comunicação com analisador lógico, organização modular do firmware, uso de Linux/WSL2, Docker, MQTT e documentação técnica por etapas.
+Este projeto está sendo desenvolvido com foco em práticas profissionais de sistemas embarcados, incluindo:
+
+* desenvolvimento com ESP-IDF;
+* uso de Linux/WSL2;
+* validação de comunicação UART;
+* análise de sinais com analisador lógico;
+* organização modular do firmware;
+* infraestrutura local com Docker;
+* comunicação MQTT;
+* documentação técnica por etapas.
 
 ---
 
@@ -14,27 +23,48 @@ Este projeto está sendo desenvolvido com foco em práticas profissionais de sis
 
 ### Etapas já implementadas
 
-* Ambiente Linux com WSL2 configurado
-* Projeto versionado no GitHub
-* Docker configurado
-* Mosquitto MQTT rodando em container
-* Node-RED rodando em container
-* Comunicação MQTT testada via terminal
-* Node-RED recebendo mensagens JSON via MQTT
-* Projeto ESP-IDF criado para teste de GPS via UART
-* ESP32 gravado com sucesso pelo WSL2 usando `usbipd`
-* GPS conectado ao ESP32 via UART2
-* Comunicação UART validada no ESP-IDF
-* Comunicação UART validada fisicamente com analisador lógico
-* Mensagens NMEA recebidas e documentadas
+* Ambiente Linux com WSL2 configurado;
+* Projeto versionado no GitHub;
+* Docker configurado;
+* Mosquitto MQTT rodando em container;
+* Node-RED rodando em container;
+* Comunicação MQTT testada via terminal;
+* Node-RED recebendo mensagens JSON via MQTT;
+* Projeto ESP-IDF criado para teste de GPS via UART;
+* ESP32 gravado com sucesso pelo WSL2 usando `usbipd`;
+* GPS conectado ao ESP32 via UART2;
+* Correção de ligação elétrica entre GPS e ESP32;
+* Comunicação UART validada no ESP-IDF;
+* Comunicação UART validada fisicamente com analisador lógico;
+* Mensagens NMEA recebidas e documentadas;
+* Parser NMEA implementado;
+* Detecção de GPS sem fix funcionando corretamente.
 
 ### Etapa atual
 
-Validação da comunicação UART entre o módulo GPS e o ESP32 utilizando analisador lógico.
+Implementação e validação inicial do **parser NMEA**.
+
+O ESP32 já recebe mensagens NMEA do GPS, interpreta sentenças dos tipos `GGA` e `RMC` e identifica corretamente quando o GPS ainda está sem fix.
+
+Como o módulo está momentaneamente sem antena, o comportamento esperado é:
+
+* receber mensagens NMEA;
+* detectar `fix_quality = 0`;
+* detectar `satellites = 0`;
+* detectar status `V` nas mensagens RMC;
+* exibir no monitor que o GPS ainda está sem fix.
 
 ### Próxima etapa
 
-Implementação do parser NMEA para interpretar as mensagens recebidas do GPS.
+Implementar um **diagnóstico técnico do GPS**, com contadores e status mais detalhado, incluindo:
+
+* quantidade de mensagens `GGA` recebidas;
+* quantidade de mensagens `RMC` recebidas;
+* quantidade de mensagens `VTG` recebidas;
+* mensagens ignoradas;
+* mensagens com checksum inválido;
+* tempo de execução;
+* último status válido do GPS.
 
 ---
 
@@ -44,15 +74,15 @@ Criar um sistema de telemetria veicular onde um ESP32 instalado no veículo lê 
 
 O sistema deverá permitir:
 
-* Monitorar latitude e longitude
-* Calcular velocidade instantânea
-* Registrar velocidade máxima
-* Calcular velocidade média
-* Medir distância percorrida
-* Identificar tempo parado e tempo em movimento
-* Exibir rota em mapa
-* Armazenar dados offline em microSD quando não houver rede
-* Reenviar dados quando a conexão for restabelecida
+* Monitorar latitude e longitude;
+* Calcular velocidade instantânea;
+* Registrar velocidade máxima;
+* Calcular velocidade média;
+* Medir distância percorrida;
+* Identificar tempo parado e tempo em movimento;
+* Exibir rota em mapa;
+* Armazenar dados offline em microSD quando não houver rede;
+* Reenviar dados quando a conexão for restabelecida.
 
 ---
 
@@ -66,8 +96,10 @@ ESP32 no veículo
     +--> Parser NMEA
     |
     +--> Cálculo de telemetria
-    |       - velocidade
-    |       - distância
+    |       - velocidade instantânea
+    |       - velocidade máxima
+    |       - velocidade média
+    |       - distância percorrida
     |       - tempo parado
     |       - tempo em movimento
     |
@@ -94,22 +126,41 @@ Servidor local
 ## Arquitetura Atual Implementada
 
 ```text
-GPS GY-NEO6MV2
+GPS GY-NEO6MV2 / NEO-6M
     |
     | UART 9600 bps
     v
 ESP32 - UART2
     |
-    | Monitor ESP-IDF
+    | Leitura byte a byte
     v
-Mensagens NMEA brutas
+Montagem de linhas NMEA
+    |
+    v
+Parser NMEA
+    |
+    +--> GGA: fix, satélites, HDOP e altitude
+    |
+    +--> RMC: validade, latitude, longitude, velocidade e data
+    |
+    v
+Monitor ESP-IDF
+```
 
+Validação física da comunicação:
 
+```text
 GPS TX
     |
     +--> ESP32 GPIO16
     |
     +--> CH1 / D0 do analisador lógico
+
+GPS GND
+    |
+    +--> GND do ESP32
+    |
+    +--> GND do analisador lógico
 ```
 
 Infraestrutura local já implementada:
@@ -129,22 +180,23 @@ Docker Compose
 
 ## Tecnologias Utilizadas
 
-* ESP32
-* ESP-IDF
-* GPS GY-NEO6MV2 / NEO-6M
-* UART
-* Analisador lógico 24 MHz / 8 canais
-* Saleae Logic 2
-* MQTT
-* Mosquitto
-* Node-RED
-* Docker
-* Docker Compose
-* WSL2 Ubuntu
-* Git e GitHub
-* VSCode
-* SQLite, planejado
-* microSD, planejado
+* ESP32;
+* ESP-IDF;
+* GPS GY-NEO6MV2 / NEO-6M;
+* UART;
+* Parser NMEA;
+* Analisador lógico 24 MHz / 8 canais;
+* Saleae Logic 2;
+* MQTT;
+* Mosquitto;
+* Node-RED;
+* Docker;
+* Docker Compose;
+* WSL2 Ubuntu;
+* Git e GitHub;
+* VSCode;
+* SQLite, planejado;
+* microSD, planejado.
 
 ---
 
@@ -161,7 +213,9 @@ telemetria-gps/
 │   ├── CMakeLists.txt
 │   ├── main/
 │   │   ├── CMakeLists.txt
-│   │   └── main.c
+│   │   ├── gps_uart_test.c
+│   │   ├── gps_parser.c
+│   │   └── gps_parser.h
 │   ├── sdkconfig
 │   └── sdkconfig.old
 ├── mosquitto/
@@ -391,20 +445,20 @@ gps_uart_test/
 
 ## Configuração utilizada
 
-* Microcontrolador: ESP32
-* Framework: ESP-IDF
-* Ambiente: Linux/WSL2
-* Comunicação: UART2
-* Baud rate: 9600 bps
-* Formato: 8N1
-* RX do ESP32: GPIO16
-* TX do ESP32: GPIO17
+* Microcontrolador: ESP32;
+* Framework: ESP-IDF;
+* Ambiente: Linux/WSL2;
+* Comunicação: UART2;
+* Baud rate: 9600 bps;
+* Formato: 8N1;
+* RX do ESP32: GPIO16;
+* TX do ESP32: GPIO17.
 
 ## Ligações entre GPS e ESP32
 
 | GPS | ESP32            |
 | --- | ---------------- |
-| VCC | 3.3V / 5V        |
+| VCC | 5V               |
 | GND | GND              |
 | TX  | GPIO16           |
 | RX  | GPIO17, opcional |
@@ -415,6 +469,8 @@ Para leitura das mensagens NMEA, a ligação principal é:
 GPS TX -> ESP32 GPIO16
 GPS GND -> ESP32 GND
 ```
+
+Durante os testes, houve um erro de ligação inicial no GND, que foi corrigido. Após a correção, o ESP32 passou a receber as mensagens NMEA corretamente.
 
 ---
 
@@ -456,6 +512,18 @@ Para sair do monitor:
 CTRL + ]
 ```
 
+Caso a porta seja diferente, verificar com:
+
+```bash
+ls /dev/ttyUSB*
+```
+
+ou:
+
+```bash
+ls /dev/ttyACM*
+```
+
 ---
 
 # Validação com Analisador Lógico
@@ -464,15 +532,15 @@ Além da leitura pelo ESP32, a comunicação UART foi validada fisicamente com u
 
 ## Objetivo
 
-Validar o sinal elétrico e o protocolo UART antes da implementação do parser NMEA e antes do teste de campo com o GPS definitivo.
+Validar o sinal elétrico e o protocolo UART antes da implementação das próximas etapas do sistema.
 
 Essa validação permite confirmar que:
 
-* O GPS está transmitindo dados pela UART
-* O baud rate está correto
-* O ESP32 está recebendo os mesmos dados
-* As mensagens seguem o padrão NMEA
-* A ausência de fix não é causada por erro de comunicação
+* O GPS está transmitindo dados pela UART;
+* O baud rate está correto;
+* O ESP32 está recebendo os mesmos dados;
+* As mensagens seguem o padrão NMEA;
+* A ausência de fix não é causada por erro de comunicação.
 
 ---
 
@@ -495,7 +563,6 @@ GPS TX
    +---- ESP32 GPIO16
    |
    +---- CH1 analisador lógico
-
 
 GPS GND
    |
@@ -550,78 +617,130 @@ As mesmas mensagens capturadas pelo analisador lógico também foram recebidas p
 
 ---
 
-## Mensagens NMEA Capturadas
+# Parser NMEA
 
-Exemplo de mensagens recebidas:
+Nesta etapa foi implementado um parser NMEA para transformar as linhas recebidas do GPS em dados estruturados.
+
+## Arquivos implementados
+
+```text
+main/
+├── gps_uart_test.c
+├── gps_parser.c
+└── gps_parser.h
+```
+
+O arquivo `gps_parser.c` é responsável por interpretar as sentenças NMEA, enquanto o arquivo `gps_parser.h` define a estrutura de dados utilizada pelo firmware.
+
+## Dados extraídos
+
+O parser foi preparado para extrair:
+
+* status de fix;
+* latitude;
+* longitude;
+* velocidade em km/h;
+* curso em graus;
+* horário UTC;
+* data;
+* quantidade de satélites;
+* qualidade do fix;
+* HDOP;
+* altitude.
+
+## Sentenças tratadas
+
+### GGA
+
+A sentença `GGA` fornece informações como:
+
+* qualidade do fix;
+* quantidade de satélites;
+* HDOP;
+* altitude;
+* latitude e longitude, quando houver fix.
+
+Exemplo recebido:
 
 ```text
 $GNGGA,,,,,,0,00,25.5,,,,,,*64
+```
+
+Interpretação:
+
+```text
+Fix quality: 0
+Satélites: 0
+HDOP: 25.5
+```
+
+O valor `fix_quality = 0` indica que o GPS ainda não possui posição válida.
+
+### RMC
+
+A sentença `RMC` fornece informações como:
+
+* validade dos dados;
+* latitude;
+* longitude;
+* velocidade;
+* curso;
+* data.
+
+Exemplo recebido:
+
+```text
 $GNRMC,,V,,,,,,,,,,M*4E
+```
+
+Interpretação:
+
+```text
+Status: V
+Dados inválidos
+GPS sem fix
+```
+
+O campo `V` indica que os dados de navegação ainda não são válidos.
+
+Quando o GPS possuir fix, esse campo deverá aparecer como `A`.
+
+### VTG
+
+A sentença `VTG` está relacionada à direção e velocidade sobre o solo.
+
+Exemplo recebido:
+
+```text
 $GNVTG,,,,,,,,,M*2D
 ```
 
----
-
-## Análise das Mensagens
-
-### Sentença GNGGA
-
-Exemplo:
-
-```text
-$GNGGA,,,,,,0,00,25.5,,,,,,*64
-```
-
-O campo `0` indica que o GPS está sem fix válido.
-
-O campo `00` indica que nenhum satélite está sendo utilizado na solução de posição.
-
-### Sentença GNRMC
-
-Exemplo:
-
-```text
-$GNRMC,,V,,,,,,,,,,M*4E
-```
-
-O campo `V` indica que os dados de navegação são inválidos.
-
-Quando o GPS possuir posição válida, esse campo deverá aparecer como `A`.
-
-### Sentença GNVTG
-
-Exemplo:
-
-```text
-$GNVTG,,,,,,,,,M*2D
-```
-
-Essa sentença é relacionada à direção e velocidade sobre o solo. Como não há fix válido no momento do teste, os campos de velocidade estão vazios.
+Como ainda não há fix válido, os campos de velocidade aparecem vazios.
 
 ---
 
-## Resultado da Validação UART
+## Saída Atual do Firmware
 
-A comunicação UART entre o módulo GPS e o ESP32 foi validada com sucesso.
-
-Status da etapa:
-
-* ESP32 gravado com ESP-IDF
-* USB do ESP32 funcionando no WSL2 via `usbipd`
-* UART2 configurada em 9600 bps
-* GPS transmitindo mensagens NMEA
-* Analisador lógico capturando o sinal UART
-* Saleae Logic 2 decodificando Async Serial corretamente
-* ESP32 recebendo as mesmas mensagens via UART
-* Fix GPS ainda inválido devido à condição atual de recepção
-
-Conclusão:
+Exemplo real obtido no monitor do ESP-IDF:
 
 ```text
-Comunicação UART validada.
-Fix GPS ainda inválido.
-Aguardando o módulo GPS com antena definitiva para teste de campo.
+W (3329) GPS_APP: GPS sem fix ainda
+W (3329) GPS_APP: Satélites: 0 | Qualidade fix: 0 | UTC:
+I (3539) GPS_APP: NMEA: $GNVTG,,,,,,,,,M*2D
+I (5079) GPS_APP: NMEA: $GNGGA,,,,,,0,00,25.5,,,,,,*64
+I (5329) GPS_APP: NMEA: $GNRMC,,V,,,,,,,,,,M*4E
+I (5539) GPS_APP: NMEA: $GNVTG,,,,,,,,,M*2D
+I (7079) GPS_APP: NMEA: $GNGGA,,,,,,0,00,25.5,,,,,,*64
 ```
+
+Essa saída confirma que:
+
+* o ESP32 está recebendo dados do GPS;
+* o baud rate está correto;
+* as linhas NMEA estão sendo montadas corretamente;
+* o parser reconhece mensagens `GGA` e `RMC`;
+* o sistema identifica corretamente que ainda não há fix válido;
+* o firmware continua estável, sem reinicializações.
 
 ---
 
@@ -629,11 +748,11 @@ Aguardando o módulo GPS com antena definitiva para teste de campo.
 
 ## Etapa 1 — Preparação do Ambiente Linux
 
-* Instalação e configuração do WSL2
-* Criação do usuário Linux
-* Atualização do Ubuntu
-* Instalação de ferramentas básicas
-* Integração com VSCode
+* Instalação e configuração do WSL2;
+* Criação do usuário Linux;
+* Atualização do Ubuntu;
+* Instalação de ferramentas básicas;
+* Integração com VSCode.
 
 Status: concluída.
 
@@ -641,8 +760,8 @@ Status: concluída.
 
 ## Etapa 2 — Instalação e Validação do Docker
 
-* Docker Desktop instalado no Windows
-* Integração com Ubuntu WSL2 habilitada
+* Docker Desktop instalado no Windows;
+* Integração com Ubuntu WSL2 habilitada;
 * Teste executado com:
 
 ```bash
@@ -661,8 +780,8 @@ Status: concluída.
 
 ## Etapa 3 — Infraestrutura Docker
 
-* Criado `docker-compose.yml`
-* Criadas pastas persistentes para Mosquitto, Node-RED e banco de dados
+* Criado `docker-compose.yml`;
+* Criadas pastas persistentes para Mosquitto, Node-RED e banco de dados;
 * Subidos containers com:
 
 ```bash
@@ -671,8 +790,8 @@ docker compose up -d
 
 Serviços iniciados:
 
-* `telemetria-mosquitto`
-* `telemetria-nodered`
+* `telemetria-mosquitto`;
+* `telemetria-nodered`.
 
 Status: concluída.
 
@@ -680,9 +799,9 @@ Status: concluída.
 
 ## Etapa 4 — Teste de Comunicação MQTT
 
-* Teste de publicação e assinatura MQTT realizado dentro do container Mosquitto
-* Teste de envio JSON para o Node-RED
-* Node-RED recebeu a mensagem corretamente no debug
+* Teste de publicação e assinatura MQTT realizado dentro do container Mosquitto;
+* Teste de envio JSON para o Node-RED;
+* Node-RED recebeu a mensagem corretamente no debug.
 
 Status: concluída.
 
@@ -690,12 +809,12 @@ Status: concluída.
 
 ## Etapa 5 — Projeto ESP-IDF para Teste UART
 
-* Projeto `gps_uart_test` criado
-* ESP32 configurado para UART2
-* RX em GPIO16
-* TX em GPIO17
-* Baud rate de 9600 bps
-* Firmware compilado e gravado no ESP32
+* Projeto `gps_uart_test` criado;
+* ESP32 configurado para UART2;
+* RX em GPIO16;
+* TX em GPIO17;
+* Baud rate de 9600 bps;
+* Firmware compilado e gravado no ESP32.
 
 Status: concluída.
 
@@ -703,9 +822,10 @@ Status: concluída.
 
 ## Etapa 6 — Validação UART com GPS
 
-* GPS conectado ao ESP32 via UART
-* Mensagens NMEA recebidas no monitor serial
-* Comunicação entre GPS e ESP32 validada
+* GPS conectado ao ESP32 via UART;
+* Correção da ligação elétrica realizada;
+* Mensagens NMEA recebidas no monitor serial;
+* Comunicação entre GPS e ESP32 validada.
 
 Status: concluída.
 
@@ -713,12 +833,28 @@ Status: concluída.
 
 ## Etapa 7 — Validação com Analisador Lógico
 
-* Analisador lógico conectado ao TX do GPS
-* GND comum entre ESP32, GPS e analisador
-* Sinal UART capturado no canal D0
-* Decoder Async Serial configurado em 9600 bps
-* Mensagens NMEA visualizadas no Saleae Logic 2
-* Mensagens comparadas com o monitor do ESP-IDF
+* Analisador lógico conectado ao TX do GPS;
+* GND comum entre ESP32, GPS e analisador;
+* Sinal UART capturado no canal D0;
+* Decoder Async Serial configurado em 9600 bps;
+* Mensagens NMEA visualizadas no Saleae Logic 2;
+* Mensagens comparadas com o monitor do ESP-IDF.
+
+Status: concluída.
+
+---
+
+## Etapa 8 — Parser NMEA
+
+* Criado arquivo `gps_parser.h`;
+* Criado arquivo `gps_parser.c`;
+* Estrutura `gps_data_t` implementada;
+* Parser para sentenças `GGA` implementado;
+* Parser para sentenças `RMC` implementado;
+* Conversão de coordenadas NMEA para decimal preparada;
+* Conversão de velocidade de nós para km/h preparada;
+* Validação de checksum implementada;
+* Detecção de GPS sem fix funcionando.
 
 Status: concluída.
 
@@ -726,28 +862,28 @@ Status: concluída.
 
 # Próximas Etapas
 
-## Etapa 8 — Parser NMEA
+## Etapa 9 — Diagnóstico Técnico do GPS
 
-Implementar o parser responsável por transformar as frases NMEA em dados estruturados.
+Adicionar contadores e informações técnicas para acompanhar a qualidade da comunicação com o GPS.
 
-O parser deverá extrair:
+Planejamento:
 
-* Tipo da sentença
-* Status do GPS
-* Validade do sinal
-* Latitude
-* Longitude
-* Velocidade
-* Quantidade de satélites
-* Estado do fix GPS
-
-Mesmo com o módulo atual sem fix válido, já é possível testar a detecção de dados inválidos. Quando o novo módulo com antena chegar, o mesmo parser será utilizado para validar latitude, longitude e velocidade reais.
+* Contador de mensagens `GGA`;
+* Contador de mensagens `RMC`;
+* Contador de mensagens `VTG`;
+* Contador de mensagens ignoradas;
+* Contador de checksums inválidos;
+* Tempo desde a inicialização;
+* Última sentença NMEA recebida;
+* Status textual do GPS: `SEM FIX`, `COM FIX`, `AGUARDANDO SATÉLITES`.
 
 ---
 
-## Etapa 9 — Estrutura Modular do Firmware
+## Etapa 10 — Organização Modular do Firmware
 
-Organizar o firmware em módulos separados:
+Separar melhor as responsabilidades do firmware.
+
+Estrutura planejada:
 
 ```text
 main/
@@ -787,69 +923,75 @@ app_main.c
 
 ---
 
-## Etapa 10 — Integração MQTT com ESP32
+## Etapa 11 — Integração MQTT com ESP32
 
 Criar firmware para:
 
-* Conectar o ESP32 ao Wi-Fi
-* Publicar dados GPS em JSON
-* Enviar mensagens para o broker Mosquitto
-* Integrar com o Node-RED
+* Conectar o ESP32 ao Wi-Fi;
+* Publicar dados GPS em JSON;
+* Enviar mensagens para o broker Mosquitto;
+* Integrar com o Node-RED.
 
 ---
 
-## Etapa 11 — Dashboard Inicial no Node-RED
+## Etapa 12 — Dashboard Inicial no Node-RED
 
 Criar uma interface para visualizar:
 
-* Velocidade atual
-* Status do veículo
-* Última latitude
-* Última longitude
-* Indicador de comunicação MQTT
-* Estado do fix GPS
-* Quantidade de satélites
+* Velocidade atual;
+* Status do veículo;
+* Última latitude;
+* Última longitude;
+* Indicador de comunicação MQTT;
+* Estado do fix GPS;
+* Quantidade de satélites.
 
 ---
 
-## Etapa 12 — Banco de Dados
+## Etapa 13 — Banco de Dados
 
 Adicionar armazenamento dos dados recebidos.
 
 Planejamento inicial:
 
-* SQLite
-* Tabela de leituras GPS
-* Registro de data/hora
-* Registro de velocidade
-* Registro de latitude
-* Registro de longitude
-* Registro de status do GPS
+* SQLite;
+* Tabela de leituras GPS;
+* Registro de data/hora;
+* Registro de velocidade;
+* Registro de latitude;
+* Registro de longitude;
+* Registro de status do GPS.
 
 ---
 
-## Etapa 13 — Armazenamento Offline em microSD
+## Etapa 14 — Armazenamento Offline em microSD
 
 Adicionar microSD ao ESP32 para:
 
-* Salvar dados localmente quando não houver conexão
-* Reenviar dados quando a rede voltar
-* Evitar perda de telemetria durante o uso no veículo
+* Salvar dados localmente quando não houver conexão;
+* Reenviar dados quando a rede voltar;
+* Evitar perda de telemetria durante o uso no veículo.
 
 ---
 
 ## Comandos Git Recomendados
 
+Verificar alterações:
+
+```bash
+git status
+```
+
 Adicionar alterações:
 
 ```bash
-git add README.md docs/images gps_uart_test .gitignore
+git add README.md gps_uart_test docs/images .gitignore
 ```
 
 Criar commit:
 
 ```bash
-git commit -m "valida uart do gps com analisador logico"
+git commit -m "documenta parser nmea e leitura gps sem fix"
 ```
 
 Enviar para o GitHub:
@@ -866,13 +1008,13 @@ Guilherme Costa
 
 Projeto desenvolvido com foco em aprendizado e portfólio profissional nas áreas de:
 
-* Sistemas embarcados
-* ESP32
-* ESP-IDF
-* IoT
-* Redes
-* MQTT
-* Linux
-* Docker
-* Telemetria veicular
-* Validação de hardware com analisador lógico
+* Sistemas embarcados;
+* ESP32;
+* ESP-IDF;
+* IoT;
+* Redes;
+* MQTT;
+* Linux;
+* Docker;
+* Telemetria veicular;
+* Validação de hardware com analisador lógico.
