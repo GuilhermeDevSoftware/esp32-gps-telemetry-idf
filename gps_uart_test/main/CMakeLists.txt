@@ -1,4 +1,11 @@
 idf_component_register(
-    SRCS "main.c" "gps_diagnostic.c"
-    INCLUDE_DIRS "."
+    SRCS
+        "main.c"
+        "gps/gps_uart.c"
+        "gps/nmea_parser.c"
+        "telemetry/telemetry.c"
+    INCLUDE_DIRS
+        "."
+        "gps"
+        "telemetry"
 )
