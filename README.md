@@ -13,6 +13,7 @@ Este projeto está sendo desenvolvido com foco em práticas profissionais de **s
 * parser NMEA;
 * validação de checksum;
 * diagnóstico técnico do GPS;
+* validação real com antena GPS externa;
 * organização modular do firmware;
 * infraestrutura local com Docker;
 * comunicação MQTT;
@@ -28,11 +29,26 @@ Este projeto está sendo desenvolvido com foco em práticas profissionais de **s
 
 A comunicação entre o **GPS GY-NEO6MV2 / NEO-6M** e o **ESP32** já foi validada por UART no ESP-IDF.
 
-Também foi implementado um diagnóstico técnico do GPS, exibindo no monitor serial:
+Também foi realizada a validação física do sinal UART utilizando analisador lógico e, posteriormente, a validação real do GPS com antena externa instalada.
+
+Com a antena conectada, o módulo GPS obteve **fix válido por satélite**, confirmando:
+
+* recepção real de satélites;
+* funcionamento da antena externa;
+* comunicação UART entre GPS e ESP32;
+* recepção de mensagens NMEA válidas;
+* validação de checksum;
+* identificação de fix GPS;
+* leitura de velocidade pela sentença `VTG`;
+* leitura de horário UTC;
+* funcionamento do diagnóstico técnico do firmware.
+
+O diagnóstico técnico do GPS exibe no monitor serial:
 
 * quantidade de mensagens `GGA`;
 * quantidade de mensagens `RMC`;
 * quantidade de mensagens `VTG`;
+* quantidade de mensagens `GSA`;
 * quantidade de mensagens ignoradas;
 * quantidade de checksums inválidos;
 * quantidade de mensagens válidas;
@@ -40,16 +56,146 @@ Também foi implementado um diagnóstico técnico do GPS, exibindo no monitor se
 * quantidade de satélites;
 * qualidade do fix;
 * tempo desde a inicialização;
+* horário UTC;
 * última mensagem NMEA válida recebida.
 
-Como o módulo GPS está temporariamente sem antena, o comportamento atual esperado é:
+---
 
-* receber mensagens NMEA;
-* validar checksum corretamente;
-* identificar `satellites = 0`;
-* identificar `fix_quality = 0`;
-* identificar status `V` nas mensagens RMC;
-* exibir o estado `AGUARDANDO SATELITES`.
+## Validação com Antena GPS
+
+A antena externa foi conectada ao módulo GPS GY-NEO6MV2 / NEO-6M e o teste foi realizado em área externa, com céu parcialmente aberto.
+
+Mesmo com visada parcial do céu, o módulo obteve fix válido após alguns minutos.
+
+### Resultado obtido
+
+O firmware identificou:
+
+```text
+Status GPS: FIX 2D
+Satélites: 8
+GGA fix quality: 1
+RMC: A
+Checksums inválidos: 0
+Mensagens válidas: 1130
+```
+
+Isso confirma que o GPS saiu do estado anterior:
+
+```text
+AGUARDANDO SATELITES
+Satelites: 0
+GGA fix quality: 0
+RMC: V
+```
+
+para um estado válido:
+
+```text
+FIX 2D
+Satelites: 8
+GGA fix quality: 1
+RMC: A
+```
+
+### Evidência do terminal
+
+![Validação do fix GPS no terminal ESP-IDF](docs/images/gps-fix-terminal.jpeg)
+
+### Montagem utilizada no teste
+
+![Montagem ESP32 com GPS e antena externa](docs/images/gps-esp32-montagem-antena.jpeg)
+
+### Ligação entre ESP32, GPS e antena
+
+![Ligação do hardware ESP32 e módulo GPS](docs/images/gps-ligacao-hardware.jpeg)
+
+---
+
+## Interpretação do Resultado
+
+Durante o teste com a antena, o GPS apresentou:
+
+```text
+Satelites: 8
+GGA fix quality: 1
+RMC: A
+```
+
+A interpretação técnica é:
+
+| Campo                    | Significado                                                  |
+| ------------------------ | ------------------------------------------------------------ |
+| `Satelites: 8`           | O módulo está recebendo satélites suficientes para navegação |
+| `GGA fix quality: 1`     | Existe fix GPS válido                                        |
+| `RMC: A`                 | Os dados de navegação são válidos                            |
+| `Checksums inválidos: 0` | As mensagens NMEA recebidas não apresentaram corrupção       |
+| `Status GPS: FIX 2D`     | O firmware identificou posição GPS válida                    |
+
+A sentença `VTG` também passou a apresentar velocidade válida:
+
+```text
+$GNVTG,348.69,T,,M,1.49,N,2.75,K,A*2F
+```
+
+Interpretação:
+
+| Campo              | Valor       |
+| ------------------ | ----------- |
+| Curso verdadeiro   | `348.69°`   |
+| Velocidade em nós  | `1.49 N`    |
+| Velocidade em km/h | `2.75 K`    |
+| Status             | `A`, válido |
+
+Como o teste foi feito parado ou com pouca movimentação, pequenas velocidades como `1 km/h`, `2 km/h` ou `3 km/h` podem aparecer devido à oscilação natural do GPS. Em etapas futuras, será implementado filtro para considerar o veículo parado abaixo de um limite mínimo de velocidade.
+
+Exemplo planejado:
+
+```c
+if (velocidade_kmh < 2.0) {
+    veiculo_parado = true;
+}
+```
+
+---
+
+## Observação Sobre Mensagens GSA
+
+Durante o teste, o firmware apresentou:
+
+```text
+Mensagens GSA: 0
+GSA fix type: 1
+```
+
+Isso não indica falha de hardware.
+
+O GPS foi validado com sucesso usando as sentenças `GGA`, `RMC` e `VTG`. O módulo pode simplesmente não estar enviando sentenças `GSA` no ciclo atual, ou o firmware ainda pode não estar tratando todas as variações possíveis, como:
+
+```text
+$GPGSA
+$GNGSA
+$GLGSA
+$BDGSA
+```
+
+Para a validação principal do projeto, o firmware considera como critérios mais importantes:
+
+```text
+GGA fix quality > 0
+RMC = A
+Satélites >= 4
+```
+
+Portanto, mesmo com `Mensagens GSA: 0`, o teste da antena e do GPS foi considerado aprovado.
+
+Em uma etapa futura, o diagnóstico poderá ser ajustado para exibir:
+
+```text
+GSA fix type: N/A
+```
+
+quando nenhuma sentença `GSA` tiver sido recebida.
 
 ---
 
@@ -72,7 +218,12 @@ Como o módulo GPS está temporariamente sem antena, o comportamento atual esper
 * Parser NMEA inicial implementado;
 * Validação de checksum implementada;
 * Diagnóstico técnico do GPS implementado;
-* Detecção de GPS sem fix funcionando corretamente.
+* Detecção de GPS sem fix funcionando corretamente;
+* Antena GPS externa instalada;
+* Primeiro fix GPS obtido com sucesso;
+* GPS validado com satélites reais;
+* Recepção de mensagens `GGA`, `RMC` e `VTG` com dados válidos;
+* Registro fotográfico da montagem e do terminal.
 
 ---
 
@@ -100,6 +251,8 @@ O sistema deverá permitir:
 ESP32 no veículo
     |
     +--> GPS GY-NEO6MV2 / NEO-6M
+    |       |
+    |       +--> Antena GPS externa
     |
     +--> Parser NMEA
     |
@@ -138,6 +291,8 @@ Servidor local
 ```text
 GPS GY-NEO6MV2 / NEO-6M
     |
+    +--> Antena GPS externa
+    |
     | UART 9600 bps
     v
 ESP32 - UART2
@@ -150,16 +305,21 @@ Montagem de linhas NMEA
 Validação de checksum
     |
     v
+Parser NMEA inicial
+    |
+    v
 Diagnóstico técnico GPS
     |
     +--> Contador GGA
     +--> Contador RMC
     +--> Contador VTG
+    +--> Contador GSA
     +--> Contador de mensagens válidas
     +--> Contador de checksums inválidos
     +--> Contador de mensagens ignoradas
     +--> Status do fix
-    +--> Tempo desde inicialização
+    +--> Satélites
+    +--> UTC
     +--> Última mensagem válida
     |
     v
@@ -202,6 +362,7 @@ Docker Compose
 * ESP32;
 * ESP-IDF;
 * GPS GY-NEO6MV2 / NEO-6M;
+* Antena GPS externa;
 * UART;
 * Parser NMEA;
 * Validação de checksum;
@@ -228,7 +389,10 @@ telemetria-gps/
 ├── docs/
 │   └── images/
 │       ├── gps_uart_saleae_logic.jpg
-│       └── gps_uart_espidf_monitor.jpg
+│       ├── gps_uart_espidf_monitor.jpg
+│       ├── gps-fix-terminal.jpeg
+│       ├── gps-esp32-montagem-antena.jpeg
+│       └── gps-ligacao-hardware.jpeg
 ├── gps_uart_test/
 │   ├── CMakeLists.txt
 │   ├── main/
@@ -560,7 +724,7 @@ Essa validação permite confirmar que:
 * o baud rate está correto;
 * o ESP32 está recebendo os mesmos dados;
 * as mensagens seguem o padrão NMEA;
-* a ausência de fix não é causada por erro de comunicação.
+* a ausência de fix inicial não era causada por erro de comunicação.
 
 ---
 
@@ -675,21 +839,26 @@ A sentença `GGA` fornece informações como:
 * altitude;
 * latitude e longitude, quando houver fix.
 
-Exemplo recebido:
+Exemplo de teste sem fix:
 
 ```text
 $GNGGA,,,,,,0,00,25.5,,,,,,*64
 ```
 
-Interpretação atual:
+Interpretação:
 
 ```text
 Fix quality: 0
 Satélites: 0
-HDOP: 25.5
+GPS sem posição válida
 ```
 
-O valor `fix_quality = 0` indica que o GPS ainda não possui posição válida.
+Com antena instalada e fix válido, o firmware passou a identificar:
+
+```text
+GGA fix quality: 1
+Satélites: 8
+```
 
 ---
 
@@ -704,13 +873,13 @@ A sentença `RMC` fornece informações como:
 * curso;
 * data.
 
-Exemplo recebido:
+Exemplo de teste sem fix:
 
 ```text
 $GNRMC,,V,,,,,,,,,,M*4E
 ```
 
-Interpretação atual:
+Interpretação:
 
 ```text
 Status: V
@@ -718,9 +887,13 @@ Dados inválidos
 GPS sem fix
 ```
 
-O campo `V` indica que os dados de navegação ainda não são válidos.
+Com antena instalada e fix válido, o status passou para:
 
-Quando o GPS possuir fix, esse campo deverá aparecer como `A`.
+```text
+RMC: A
+```
+
+O campo `A` indica que os dados de navegação estão válidos.
 
 ---
 
@@ -728,21 +901,34 @@ Quando o GPS possuir fix, esse campo deverá aparecer como `A`.
 
 A sentença `VTG` está relacionada à direção e velocidade sobre o solo.
 
-Exemplo recebido:
+Exemplo com dados válidos após fix:
 
 ```text
-$GNVTG,,,,,,,,,M*2D
+$GNVTG,348.69,T,,M,1.49,N,2.75,K,A*2F
 ```
 
-Como ainda não há fix válido, os campos de velocidade aparecem vazios.
+Interpretação:
+
+```text
+Curso verdadeiro: 348.69 graus
+Velocidade: 1.49 nós
+Velocidade: 2.75 km/h
+Status: A
+```
+
+Essa sentença será importante para cálculo de:
+
+* velocidade instantânea;
+* velocidade máxima;
+* velocidade média;
+* detecção de veículo parado;
+* detecção de veículo em movimento.
 
 ---
 
 ### GSA
 
 A sentença `GSA` pode indicar se o GPS possui fix 2D ou 3D.
-
-O firmware já está preparado para ler essa sentença caso o módulo passe a enviá-la.
 
 Status possíveis considerados:
 
@@ -752,7 +938,7 @@ Status possíveis considerados:
 3 - Fix 3D
 ```
 
-No teste atual, o módulo ainda não enviou mensagens `GSA`.
+No teste atual, o módulo não enviou mensagens `GSA`, mas isso não impediu a validação do fix GPS, pois o firmware conseguiu confirmar dados válidos por meio das sentenças `GGA`, `RMC` e `VTG`.
 
 ---
 
@@ -778,9 +964,9 @@ O diagnóstico técnico exibe:
 
 ---
 
-## Saída Atual do Firmware
+## Saída Inicial Sem Fix
 
-Exemplo real obtido no monitor do ESP-IDF:
+Exemplo real obtido no monitor do ESP-IDF durante teste inicial sem fix:
 
 ```text
 I (6338) GPS_APP: ================ DIAGNOSTICO GPS ================
@@ -799,15 +985,47 @@ I (6368) GPS_APP: Ultima mensagem valida: $GNVTG,,,,,,,,,M*2D
 I (6378) GPS_APP: =================================================
 ```
 
+Essa saída confirmou que:
+
+* o ESP32 estava recebendo dados do GPS;
+* o baud rate estava correto;
+* as linhas NMEA estavam sendo montadas corretamente;
+* as mensagens estavam passando pela validação de checksum;
+* o firmware identificava corretamente que o GPS ainda estava aguardando satélites.
+
+---
+
+## Saída Atual Com Antena e Fix GPS
+
+Exemplo real obtido no monitor do ESP-IDF após instalação da antena GPS externa:
+
+```text
+I (750227) GPS_APP: ================ DIAGNOSTICO GPS ================
+I (750227) GPS_APP: Tempo desde inicializacao: 749 s
+I (750227) GPS_APP: Status GPS: FIX 2D
+I (750227) GPS_APP: Mensagens GGA: 374
+I (750227) GPS_APP: Mensagens RMC: 374
+I (750237) GPS_APP: Mensagens VTG: 374
+I (750237) GPS_APP: Mensagens GSA: 0
+I (750237) GPS_APP: Mensagens ignoradas: 8
+I (750247) GPS_APP: Checksums invalidos: 0
+I (750247) GPS_APP: Mensagens validas: 1130
+I (750247) GPS_APP: Satelites: 8 | GGA fix quality: 1 | GSA fix type: 1 | RMC: A
+I (750257) GPS_APP: UTC: 183256.000
+I (750257) GPS_APP: Ultima mensagem valida: $GNVTG,348.69,T,,M,1.49,N,2.75,K,A*2F
+I (750267) GPS_APP: =================================================
+```
+
 Essa saída confirma que:
 
-* o ESP32 está recebendo dados do GPS;
-* o baud rate está correto;
-* as linhas NMEA estão sendo montadas corretamente;
-* as mensagens estão passando pela validação de checksum;
-* não há mensagens corrompidas no teste atual;
-* o firmware identifica corretamente que o GPS ainda está aguardando satélites;
-* a ausência de fix é compatível com o teste atual sem antena.
+* o GPS obteve fix válido;
+* a antena externa está funcionando;
+* o módulo recebeu 8 satélites;
+* a sentença `GGA` indicou `fix quality = 1`;
+* a sentença `RMC` indicou status `A`;
+* a sentença `VTG` apresentou velocidade válida;
+* não houve checksum inválido;
+* o firmware está interpretando corretamente o estado do GPS.
 
 ---
 
@@ -822,13 +1040,11 @@ FIX 2D
 FIX 3D
 ```
 
-No estado atual do projeto, o status exibido é:
+No estado atual do projeto, após a instalação da antena externa, o status exibido é:
 
 ```text
-AGUARDANDO SATELITES
+FIX 2D
 ```
-
-Isso é esperado porque o GPS está sem antena e ainda não recebeu sinal suficiente dos satélites.
 
 ---
 
@@ -963,22 +1179,25 @@ Status: concluída.
 
 ---
 
-# Próximas Etapas
+## Etapa 10 — Validação com Antena GPS
 
-## Etapa 10 — Teste com Antena GPS
+* Antena GPS externa conectada ao módulo;
+* Teste realizado em área externa com céu parcialmente aberto;
+* GPS saiu do estado `AGUARDANDO SATELITES`;
+* Fix válido obtido;
+* 8 satélites identificados;
+* `GGA fix quality = 1`;
+* `RMC = A`;
+* `VTG` com velocidade válida;
+* Nenhum checksum inválido;
+* Montagem documentada com fotos;
+* Log do terminal documentado.
 
-Validar o funcionamento do GPS com antena instalada.
-
-Objetivos:
-
-* verificar aumento na quantidade de satélites;
-* verificar alteração do status de `AGUARDANDO SATELITES` para `FIX 2D` ou `FIX 3D`;
-* confirmar recebimento de horário UTC;
-* confirmar recebimento de latitude e longitude;
-* confirmar campos válidos nas sentenças `GGA` e `RMC`;
-* documentar os logs reais com fix válido.
+Status: concluída.
 
 ---
+
+# Próximas Etapas
 
 ## Etapa 11 — Extração de Latitude, Longitude e Velocidade
 
@@ -991,7 +1210,9 @@ Planejamento:
 * converter velocidade de nós para km/h;
 * armazenar último ponto válido;
 * exibir latitude e longitude no monitor;
-* diferenciar dados válidos e inválidos.
+* diferenciar dados válidos e inválidos;
+* tratar ruído de velocidade quando o GPS estiver parado;
+* definir limite mínimo para considerar movimento real.
 
 ---
 
@@ -1098,16 +1319,16 @@ Verificar alterações:
 git status
 ```
 
-Adicionar alterações:
+Adicionar README e imagens:
 
 ```bash
-git add README.md gps_uart_test docs/images .gitignore
+git add README.md docs/images/gps-fix-terminal.jpeg docs/images/gps-esp32-montagem-antena.jpeg docs/images/gps-ligacao-hardware.jpeg
 ```
 
 Criar commit:
 
 ```bash
-git commit -m "Documenta diagnostico tecnico do GPS"
+git commit -m "docs: documentar validacao do GPS com antena"
 ```
 
 Enviar para o GitHub:
@@ -1120,20 +1341,29 @@ git push
 
 # Observações Técnicas
 
-Durante esta etapa, o GPS ainda está sem antena. Portanto, a ausência de fix é esperada.
-
-Mesmo sem fix válido, a etapa atual comprova pontos importantes do sistema embarcado:
+A etapa atual comprova pontos importantes do sistema embarcado:
 
 * comunicação UART funcional;
 * alimentação e GND corretos;
 * baud rate correto;
 * recepção de sentenças NMEA;
 * validação de checksum funcionando;
-* ausência de mensagens corrompidas no teste atual;
+* ausência de mensagens corrompidas no teste com antena;
+* antena GPS externa funcionando;
+* fix GPS obtido;
+* recepção real de satélites;
 * firmware estável;
 * diagnóstico técnico periódico implementado.
 
-A validação com antena será necessária para confirmar os dados reais de posicionamento, como latitude, longitude, horário UTC, velocidade e tipo de fix.
+A próxima etapa será transformar os dados NMEA válidos em informações úteis para telemetria, principalmente:
+
+* latitude em decimal;
+* longitude em decimal;
+* velocidade em km/h;
+* status parado/em movimento;
+* distância percorrida;
+* velocidade máxima;
+* velocidade média.
 
 ---
 
