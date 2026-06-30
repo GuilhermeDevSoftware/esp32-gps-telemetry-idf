@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -16,6 +18,7 @@ static const char *TAG = "GPS_APP";
 
 #define GPS_LOG_INTERVAL_MS        5000
 #define TELEMETRY_LOG_INTERVAL_MS  5000
+#define SERIAL_CMD_MAX_LEN         64
 
 static bool is_rmc_sentence(const char *sentence)
 {
@@ -26,10 +29,74 @@ static bool is_rmc_sentence(const char *sentence)
     return strstr(sentence, "RMC") != NULL;
 }
 
+static void console_input_init(void)
+{
+    setvbuf(stdin, NULL, _IONBF, 0);
+
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    }
+
+    ESP_LOGI(TAG, "Comandos seriais disponiveis:");
+    ESP_LOGI(TAG, "  export  -> envia telemetry.csv pela serial");
+    ESP_LOGI(TAG, "  help    -> mostra os comandos disponiveis");
+}
+
+static void handle_serial_command(const char *cmd)
+{
+    if (cmd == NULL || cmd[0] == '\0') {
+        return;
+    }
+
+    if (strcmp(cmd, "export") == 0) {
+        ESP_LOGI(TAG, "Comando recebido: export");
+        sdcard_logger_export_csv_to_stdout();
+        return;
+    }
+
+    if (strcmp(cmd, "help") == 0) {
+        ESP_LOGI(TAG, "Comandos disponiveis:");
+        ESP_LOGI(TAG, "  export  -> envia telemetry.csv pela serial");
+        ESP_LOGI(TAG, "  help    -> mostra esta ajuda");
+        return;
+    }
+
+    ESP_LOGW(TAG, "Comando desconhecido: %s", cmd);
+    ESP_LOGI(TAG, "Digite 'help' para listar os comandos.");
+}
+
+static void check_serial_command(void)
+{
+    static char cmd_buffer[SERIAL_CMD_MAX_LEN];
+    static size_t cmd_index = 0;
+
+    char ch;
+
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\r' || ch == '\n') {
+            if (cmd_index > 0) {
+                cmd_buffer[cmd_index] = '\0';
+                handle_serial_command(cmd_buffer);
+                cmd_index = 0;
+            }
+        } else {
+            if (cmd_index < SERIAL_CMD_MAX_LEN - 1) {
+                cmd_buffer[cmd_index++] = ch;
+            } else {
+                cmd_index = 0;
+                ESP_LOGW(TAG, "Comando serial muito longo. Buffer reiniciado.");
+            }
+        }
+    }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "Inicializando projeto de telemetria GPS com ESP-IDF");
-    ESP_LOGI(TAG, "Etapa atual: telemetria veicular com gravacao em microSD");
+    ESP_LOGI(TAG, "Etapa atual: microSD logger com exportacao serial USB");
+
+    console_input_init();
 
     gps_uart_init();
 
@@ -54,11 +121,15 @@ void app_main(void)
     int64_t last_waiting_log_ms = 0;
 
     while (1) {
+        check_serial_command();
+
         bool received = gps_uart_read_line(
             nmea_line,
             sizeof(nmea_line),
             pdMS_TO_TICKS(2500)
         );
+
+        check_serial_command();
 
         if (!received) {
             ESP_LOGW(TAG, "Nenhuma linha NMEA recebida no intervalo");

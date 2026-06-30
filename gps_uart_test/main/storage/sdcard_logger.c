@@ -39,11 +39,16 @@ static bool write_csv_header_if_needed(void)
             file,
             "utc,latitude,longitude,speed_kmh,max_speed_kmh,avg_speed_kmh,total_distance_m,status,stopped_time_s,moving_time_s,satellites,hdop\n"
         );
+
         fflush(file);
+
         ESP_LOGI(TAG, "Cabecalho CSV criado em %s", SDCARD_TELEMETRY_FILE);
+    } else {
+        ESP_LOGI(TAG, "Arquivo CSV existente encontrado: %s", SDCARD_TELEMETRY_FILE);
     }
 
     fclose(file);
+
     return true;
 }
 
@@ -63,6 +68,14 @@ bool sdcard_logger_init(void)
     };
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+
+    /*
+     * Velocidade reduzida para melhorar estabilidade com módulos microSD,
+     * jumpers e montagem em bancada.
+     *
+     * Sem essa redução, alguns cartões podem falhar com:
+     * ESP_ERR_INVALID_CRC
+     */
     host.max_freq_khz = SDMMC_FREQ_PROBING;
 
     spi_bus_config_t bus_cfg = {
@@ -117,6 +130,7 @@ bool sdcard_logger_init(void)
     }
 
     s_sdcard_ready = true;
+
     ESP_LOGI(TAG, "Arquivo de telemetria pronto: %s", SDCARD_TELEMETRY_FILE);
 
     return true;
@@ -141,15 +155,19 @@ bool sdcard_logger_log(const gps_data_t *gps, const telemetry_data_t *telemetry)
         return false;
     }
 
+    if (gps->utc_time[0] == '\0') {
+        return false;
+    }
+
     FILE *file = fopen(SDCARD_TELEMETRY_FILE, "a");
     if (file == NULL) {
-        ESP_LOGE(TAG, "Falha ao abrir arquivo CSV para escrita");
+        ESP_LOGE(TAG, "Falha ao abrir arquivo CSV para escrita: %s", SDCARD_TELEMETRY_FILE);
         return false;
     }
 
     const char *status = telemetry->is_moving ? "MOVING" : "STOPPED";
 
-    fprintf(
+    int written = fprintf(
         file,
         "%s,%.6f,%.6f,%.2f,%.2f,%.2f,%.2f,%s,%lu,%lu,%d,%.2f\n",
         gps->utc_time,
@@ -166,6 +184,12 @@ bool sdcard_logger_log(const gps_data_t *gps, const telemetry_data_t *telemetry)
         gps->hdop
     );
 
+    if (written < 0) {
+        ESP_LOGE(TAG, "Erro ao escrever linha no CSV");
+        fclose(file);
+        return false;
+    }
+
     fflush(file);
     fclose(file);
 
@@ -174,6 +198,39 @@ bool sdcard_logger_log(const gps_data_t *gps, const telemetry_data_t *telemetry)
     if ((s_lines_written % 10) == 0) {
         ESP_LOGI(TAG, "Linhas gravadas no CSV: %lu", (unsigned long)s_lines_written);
     }
+
+    return true;
+}
+
+bool sdcard_logger_export_csv_to_stdout(void)
+{
+    if (!s_sdcard_ready) {
+        ESP_LOGW(TAG, "microSD indisponivel. Nao foi possivel exportar CSV.");
+        return false;
+    }
+
+    FILE *file = fopen(SDCARD_TELEMETRY_FILE, "r");
+    if (file == NULL) {
+        ESP_LOGE(TAG, "Falha ao abrir %s para exportacao", SDCARD_TELEMETRY_FILE);
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Iniciando exportacao serial de %s", SDCARD_TELEMETRY_FILE);
+
+    printf("\n---CSV_BEGIN---\n");
+
+    char line[256];
+
+    while (fgets(line, sizeof(line), file) != NULL) {
+        printf("%s", line);
+    }
+
+    printf("---CSV_END---\n");
+    fflush(stdout);
+
+    fclose(file);
+
+    ESP_LOGI(TAG, "Exportacao CSV finalizada");
 
     return true;
 }

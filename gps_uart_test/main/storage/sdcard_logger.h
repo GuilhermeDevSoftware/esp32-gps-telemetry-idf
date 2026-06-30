@@ -17,5 +17,6 @@
 bool sdcard_logger_init(void);
 bool sdcard_logger_is_ready(void);
 bool sdcard_logger_log(const gps_data_t *gps, const telemetry_data_t *telemetry);
+bool sdcard_logger_export_csv_to_stdout(void);
 
 #endif
