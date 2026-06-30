@@ -1,20 +1,20 @@
 # ESP32 GPS Telemetry IDF
 
-Sistema de telemetria veicular utilizando **ESP32**, **GPS GY-NEO6MV2 / NEO-6M**, **ESP-IDF**, **UART**, **parser NMEA**, **cálculo embarcado de telemetria**, **Docker**, **Mosquitto MQTT**, **Node-RED** e armazenamento offline planejado.
+Sistema de telemetria GPS desenvolvido com **ESP32**, **ESP-IDF**, **GPS GY-NEO6MV2 / NEO-6M**, **UART**, **parser NMEA**, **telemetria embarcada**, **microSD**, **exportação serial USB**, **Docker**, **Mosquitto MQTT** e **Node-RED**.
 
-O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados reais de localização e movimento de um veículo, interpretar mensagens GPS em formato NMEA, calcular métricas de telemetria localmente no ESP32 e futuramente transmitir essas informações para um servidor local com dashboard, mapa e banco de dados.
+O objetivo do projeto é desenvolver uma solução embarcada capaz de coletar dados reais de localização e movimento, interpretar mensagens GPS em formato NMEA, calcular métricas de telemetria localmente no ESP32, armazenar os dados offline em microSD e futuramente transmitir as informações para um servidor local com dashboard, banco de dados e mapa.
 
 Este projeto está sendo desenvolvido com foco em práticas profissionais de:
 
 * firmware embarcado;
 * ESP-IDF;
 * comunicação UART;
-* análise de sinais;
 * parser de protocolo;
-* tratamento de dados GPS;
-* cálculo de telemetria;
-* arquitetura modular de firmware;
-* validação de hardware real;
+* análise de sinais;
+* integração de hardware real;
+* armazenamento offline;
+* telemetria veicular;
+* validação em campo;
 * documentação técnica por etapas.
 
 ---
@@ -25,15 +25,15 @@ Este projeto está sendo desenvolvido com foco em práticas profissionais de:
 
 ### Status atual
 
-A etapa atual implementa um sistema embarcado de telemetria GPS com:
+A etapa atual implementa e valida um sistema embarcado de telemetria GPS com:
 
 * leitura UART do módulo GPS no ESP32;
 * recepção de sentenças NMEA reais;
-* parsing das sentenças `GGA`, `RMC` e `VTG`;
+* parser das sentenças `GGA`, `RMC` e `VTG`;
 * extração de latitude, longitude, velocidade, altitude, satélites, qualidade do fix, HDOP e horário UTC;
-* validação real com antena GPS externa;
+* validação com antena GPS externa;
 * cálculo local de telemetria veicular;
-* identificação de veículo parado ou em movimento;
+* identificação de estado `PARADO` e `MOVING`;
 * cálculo de velocidade atual;
 * cálculo de velocidade máxima;
 * cálculo de velocidade média;
@@ -41,55 +41,82 @@ A etapa atual implementa um sistema embarcado de telemetria GPS com:
 * cálculo de tempo parado;
 * cálculo de tempo em movimento;
 * filtro contra drift do GPS;
-* organização modular do firmware.
+* gravação dos dados em arquivo CSV no microSD;
+* exportação do CSV pela serial USB;
+* primeiro teste de campo com power bank.
 
-O firmware já foi testado com o GPS parado e em movimentação curta, validando o comportamento do sistema em cenário real.
+O sistema já foi testado em bancada, em área externa e em funcionamento autônomo alimentado por power bank.
 
 ---
 
-## Resultado Atual da Telemetria
+## Marco Atual do Projeto
 
-Após a validação com antena externa, o GPS passou a obter fix válido e fornecer dados reais para o ESP32.
+O projeto alcançou o primeiro teste de campo real.
 
-Exemplo de dados extraídos pelo firmware:
+Fluxo validado:
 
 ```text
-Fix valido: SIM
-UTC: 192516.000
-Latitude: -21.540XXX
-Longitude: -49.841XXX
-Velocidade: 0.00 km/h
-Altitude: 399.70 m
-Satélites: 9
-Qualidade do fix: 1
-HDOP: 1.10
+Power bank
+   |
+   v
+ESP32
+   |
+   +--> GPS GY-NEO6MV2 / NEO-6M
+   |
+   +--> Parser NMEA
+   |
+   +--> Cálculo de telemetria
+   |
+   +--> microSD
+          |
+          +--> telemetry.csv
 ```
 
-As coordenadas foram parcialmente mascaradas por privacidade.
-
-Durante o teste com movimentação curta, o firmware identificou corretamente o estado de movimento:
+Depois do teste, o ESP32 foi conectado novamente ao notebook e o arquivo CSV foi exportado pela serial USB com o comando:
 
 ```text
-Status: EM MOVIMENTO
-Velocidade atual: 3.93 km/h
-Velocidade maxima: 6.87 km/h
-Velocidade media: 4.12 km/h
-Distancia percorrida: 13.73 m
-Tempo parado: 97 s
-Tempo em movimento: 12 s
-Amostras validas: 70
-Satélites: 9
-HDOP: 1.10
+export
 ```
 
-Também foi validado o comportamento parado:
+Esse teste validou que o sistema consegue operar sem notebook durante a coleta, gravar os dados localmente e disponibilizar o histórico depois.
+
+---
+
+## Resultado do Teste com Power Bank
+
+Durante o teste de campo, o ESP32 foi alimentado por power bank e permaneceu gravando dados no microSD.
+
+O teste incluiu:
+
+* período parado em frente à residência;
+* caminhada curta;
+* pequena corrida;
+* retorno e exportação dos dados pela serial USB.
+
+Resumo do resultado obtido:
 
 ```text
-Status: PARADO
-Velocidade atual: 0.00 km/h
-Tempo parado aumentando
-Tempo em movimento preservado
-Distância percorrida não aumentando com pequenas oscilações
+GPS com fix válido: SIM
+Satélites: até 15
+HDOP: até 0.70
+Velocidade máxima registrada: 12.35 km/h
+Distância acumulada registrada: 27.48 m
+Status MOVING detectado: SIM
+Gravação em microSD: SIM
+Exportação serial: SIM
+```
+
+As coordenadas reais foram parcialmente omitidas por privacidade.
+
+Exemplo de trecho exportado do CSV:
+
+```csv
+utc,latitude,longitude,speed_kmh,max_speed_kmh,avg_speed_kmh,total_distance_m,status,stopped_time_s,moving_time_s,satellites,hdop
+202136.000,-21.540XXX,-49.841XXX,7.28,7.48,0.00,0.00,MOVING,229,7,15,0.70
+202138.000,-21.540XXX,-49.841XXX,8.19,8.19,0.00,0.00,MOVING,229,8,15,0.70
+202140.000,-21.540XXX,-49.841XXX,7.43,8.19,2.00,5.55,MOVING,229,10,15,0.70
+202142.000,-21.540XXX,-49.841XXX,9.43,9.43,3.64,11.13,MOVING,229,11,15,0.70
+202154.000,-21.540XXX,-49.841XXX,12.35,12.35,3.97,22.07,MOVING,230,20,15,0.70
 ```
 
 ---
@@ -112,7 +139,7 @@ Com isso, o sistema só considera movimento quando:
 * existe deslocamento mínimo relevante entre dois pontos;
 * as coordenadas são válidas.
 
-Esse filtro torna a telemetria mais adequada para uso veicular, reduzindo falsas leituras causadas por ruído de GPS em ambiente parado ou com movimentação muito curta.
+Esse filtro torna a telemetria mais adequada para uso veicular e reduz falsas leituras causadas por ruído de GPS quando o sistema está parado.
 
 ---
 
@@ -151,7 +178,12 @@ telemetry.c
     | Tempo em movimento
     | Filtro contra drift
     v
-Monitor ESP-IDF
+sdcard_logger.c
+    |
+    | Gravação CSV no microSD
+    | Exportação serial USB
+    v
+telemetry.csv
 ```
 
 ---
@@ -166,17 +198,12 @@ ESP32 no veículo
     +--> Parser NMEA
     |
     +--> Cálculo de telemetria
-    |       - velocidade atual
-    |       - velocidade máxima
-    |       - velocidade média
-    |       - distância percorrida
-    |       - tempo parado
-    |       - tempo em movimento
     |
     +--> microSD
     |       - armazenamento offline
     |       - histórico de pontos GPS
-    |       - reenvio futuro quando houver conexão
+    |       - exportação serial
+    |       - futura organização por sessão
     |
     +--> Wi-Fi / MQTT
             |
@@ -209,7 +236,8 @@ telemetria-gps/
 │   │   ├── gps-esp32-montagem-antena.jpeg
 │   │   └── gps-ligacao-hardware.jpeg
 │   └── logs/
-│       └── gps_fix_real_terminal.txt
+│       ├── gps_fix_real_terminal.txt
+│       └── telemetry_powerbank_export_raw.txt
 ├── gps_uart_test/
 │   ├── CMakeLists.txt
 │   ├── main/
@@ -223,6 +251,9 @@ telemetria-gps/
 │   │   ├── telemetry/
 │   │   │   ├── telemetry.c
 │   │   │   └── telemetry.h
+│   │   ├── storage/
+│   │   │   ├── sdcard_logger.c
+│   │   │   └── sdcard_logger.h
 │   │   └── legacy/
 │   ├── sdkconfig
 │   └── sdkconfig.old
@@ -276,7 +307,7 @@ Responsável por:
 Responsável por:
 
 * receber os dados tratados do GPS;
-* determinar se o veículo está parado ou em movimento;
+* determinar se o sistema está parado ou em movimento;
 * calcular velocidade atual;
 * registrar velocidade máxima;
 * calcular velocidade média;
@@ -286,16 +317,31 @@ Responsável por:
 * aplicar filtro contra drift do GPS;
 * exibir o resumo da telemetria no monitor serial.
 
+### `sdcard_logger.c`
+
+Responsável por:
+
+* inicializar o microSD via SPI;
+* montar o sistema de arquivos FAT;
+* criar o arquivo `telemetry.csv`;
+* escrever o cabeçalho CSV;
+* gravar as amostras de telemetria;
+* manter os dados offline;
+* exportar o CSV pela serial USB.
+
 ### `main.c`
 
 Responsável por:
 
 * inicializar o sistema;
 * inicializar a UART do GPS;
+* inicializar o microSD;
 * inicializar as estruturas de dados;
 * receber linhas NMEA;
 * chamar o parser;
 * atualizar a telemetria;
+* gravar dados no microSD;
+* processar comandos seriais;
 * exibir os logs principais no monitor do ESP-IDF.
 
 ---
@@ -354,6 +400,75 @@ typedef struct {
 
 ---
 
+## Formato do Arquivo CSV
+
+O arquivo gerado no microSD atualmente é:
+
+```text
+/sdcard/telemetry.csv
+```
+
+Cabeçalho do CSV:
+
+```csv
+utc,latitude,longitude,speed_kmh,max_speed_kmh,avg_speed_kmh,total_distance_m,status,stopped_time_s,moving_time_s,satellites,hdop
+```
+
+Cada linha registra:
+
+* horário UTC;
+* latitude;
+* longitude;
+* velocidade atual;
+* velocidade máxima;
+* velocidade média;
+* distância acumulada;
+* status `MOVING` ou `STOPPED`;
+* tempo parado;
+* tempo em movimento;
+* quantidade de satélites;
+* HDOP.
+
+---
+
+## Comandos Seriais Implementados
+
+O firmware aceita comandos digitados diretamente no `idf.py monitor`.
+
+### Exportar CSV
+
+```text
+export
+```
+
+Esse comando imprime o conteúdo do arquivo CSV pela serial USB entre os marcadores:
+
+```text
+---CSV_BEGIN---
+...
+---CSV_END---
+```
+
+Exemplo de uso:
+
+```bash
+idf.py monitor | tee ../docs/logs/telemetry_powerbank_export_raw.txt
+```
+
+Depois, no monitor:
+
+```text
+export
+```
+
+Para sair do monitor:
+
+```text
+CTRL + ]
+```
+
+---
+
 ## Tecnologias Utilizadas
 
 * ESP32;
@@ -361,6 +476,8 @@ typedef struct {
 * GPS GY-NEO6MV2 / NEO-6M;
 * Antena GPS externa;
 * UART;
+* SPI;
+* microSD;
 * Parser NMEA;
 * C;
 * FreeRTOS;
@@ -376,28 +493,31 @@ typedef struct {
 
 Tecnologias planejadas para as próximas etapas:
 
-* microSD;
+* organização de arquivos por sessão;
+* comandos `status`, `clear` seguro e `export last`;
 * MQTT no ESP32;
 * SQLite;
 * dashboard Node-RED;
 * mapa;
-* armazenamento offline;
 * reenvio de dados.
 
 ---
 
 ## Hardware Utilizado
 
-| Componente              | Função                             |
-| ----------------------- | ---------------------------------- |
-| ESP32 DevKit            | Microcontrolador principal         |
-| GPS GY-NEO6MV2 / NEO-6M | Módulo GNSS                        |
-| Antena GPS externa      | Melhoria de recepção dos satélites |
-| Analisador lógico       | Validação física do sinal UART     |
-| Notebook Windows + WSL2 | Ambiente de desenvolvimento        |
-| Docker                  | Infraestrutura local               |
-| Mosquitto               | Broker MQTT                        |
-| Node-RED                | Dashboard e integração futura      |
+| Componente              | Função                                      |
+| ----------------------- | ------------------------------------------- |
+| ESP32 DevKit            | Microcontrolador principal                  |
+| GPS GY-NEO6MV2 / NEO-6M | Módulo GNSS                                 |
+| Antena GPS externa      | Melhoria de recepção dos satélites          |
+| Módulo microSD          | Armazenamento offline dos dados             |
+| Cartão microSD          | Registro local do arquivo CSV               |
+| Power bank              | Alimentação autônoma para teste de campo    |
+| Analisador lógico       | Validação física do sinal UART              |
+| Notebook Windows + WSL2 | Ambiente de desenvolvimento                 |
+| Docker                  | Infraestrutura local futura                 |
+| Mosquitto               | Broker MQTT futuro                          |
+| Node-RED                | Dashboard e integração futura               |
 
 ---
 
@@ -405,7 +525,7 @@ Tecnologias planejadas para as próximas etapas:
 
 | GPS | ESP32            |
 | --- | ---------------- |
-| VCC | 5V               |
+| VCC | 3V3              |
 | GND | GND              |
 | TX  | GPIO16           |
 | RX  | GPIO17, opcional |
@@ -413,9 +533,30 @@ Tecnologias planejadas para as próximas etapas:
 Ligação principal para leitura:
 
 ```text
-GPS TX -> ESP32 GPIO16
+GPS TX  -> ESP32 GPIO16
 GPS GND -> ESP32 GND
 ```
+
+---
+
+## Ligações entre microSD e ESP32
+
+| microSD | ESP32 |
+| ------- | ----- |
+| VCC     | 5V    |
+| GND     | GND   |
+| CS      | GPIO5 |
+| SCK/CLK | GPIO18 |
+| MISO/DO | GPIO19 |
+| MOSI/DI | GPIO23 |
+
+Observação: durante os testes, a comunicação SPI do microSD apresentou maior estabilidade com velocidade reduzida:
+
+```c
+host.max_freq_khz = SDMMC_FREQ_PROBING;
+```
+
+Essa configuração evitou falhas de comunicação como `ESP_ERR_INVALID_CRC`.
 
 ---
 
@@ -471,9 +612,35 @@ CTRL + ]
 
 ---
 
+## Teste com Power Bank
+
+Procedimento utilizado no primeiro teste de campo:
+
+```text
+1. Alimentar o ESP32 pelo power bank
+2. Deixar o GPS obter fix em área aberta
+3. Permanecer parado por alguns minutos
+4. Caminhar ou correr por um curto trajeto
+5. Desligar o power bank
+6. Conectar o ESP32 novamente ao notebook
+7. Abrir o monitor serial
+8. Digitar export
+9. Salvar a saída em arquivo .txt
+```
+
+Comando utilizado para salvar a exportação no notebook:
+
+```bash
+idf.py monitor | tee ../docs/logs/telemetry_powerbank_export_raw.txt
+```
+
+O teste confirmou que o projeto já funciona como um data logger GPS autônomo.
+
+---
+
 ## Serviços Docker
 
-O projeto utiliza Docker Compose para subir os serviços locais.
+O projeto utiliza Docker Compose para subir os serviços locais planejados.
 
 ### Mosquitto MQTT
 
@@ -735,75 +902,123 @@ Status: concluída.
 * cálculo de distância percorrida;
 * cálculo de tempo parado;
 * cálculo de tempo em movimento;
-* identificação de status `PARADO` e `EM MOVIMENTO`;
+* identificação de status `PARADO` e `MOVING`;
 * aplicação de filtro de movimento com limite de 5 km/h;
 * aplicação de distância mínima para reduzir drift;
-* teste real caminhando e parado.
+* teste real caminhando, correndo e parado.
+
+Status: concluída.
+
+### Etapa 14 — Gravação em microSD
+
+* inicialização do microSD via SPI;
+* montagem do sistema de arquivos FAT;
+* criação do arquivo `telemetry.csv`;
+* escrita do cabeçalho CSV;
+* gravação das amostras de telemetria;
+* uso de `fflush()` e `fclose()` após cada linha para reduzir risco de perda de dados;
+* ajuste de velocidade SPI para estabilidade.
+
+Status: concluída.
+
+### Etapa 15 — Exportação Serial do CSV
+
+* criação do comando `export`;
+* leitura do arquivo `telemetry.csv`;
+* envio do conteúdo pela USB serial;
+* salvamento da saída no notebook com `tee`;
+* validação da exportação após teste de campo.
+
+Status: concluída.
+
+### Etapa 16 — Primeiro Teste de Campo com Power Bank
+
+* ESP32 alimentado por power bank;
+* GPS obtendo fix em ambiente externo;
+* microSD gravando sem notebook conectado;
+* caminhada e corrida curta registradas;
+* CSV exportado posteriormente pela serial USB;
+* velocidade máxima e status `MOVING` identificados nos dados.
 
 Status: concluída.
 
 ---
 
-## Próximas Etapas
+## Próxima Etapa — Melhorias para Testes com Power Bank
 
-### Etapa 14 — Gravação em microSD
+A próxima melhoria será tornar os testes de campo mais organizados e seguros.
 
-Implementar armazenamento local dos dados de telemetria.
+Problema observado na etapa atual:
 
-Planejamento:
+* o arquivo `telemetry.csv` acumula dados de vários testes;
+* ao reiniciar o ESP32, os dados novos continuam no mesmo arquivo;
+* isso dificulta separar um teste de bancada de um teste com power bank;
+* um desligamento durante gravação pode deixar uma linha incompleta no CSV.
 
-* criar arquivo CSV no microSD;
-* salvar UTC, latitude, longitude, velocidade, distância e status;
-* manter registro local mesmo sem rede;
-* preparar base para reenvio futuro.
+Melhorias planejadas:
 
-Exemplo planejado:
+### Arquivos por sessão
 
-```csv
-utc,latitude,longitude,speed_kmh,total_distance_m,status,satellites,hdop
-192516.000,-21.540XXX,-49.841XXX,3.93,13.73,MOVING,9,1.10
+Em vez de gravar tudo em:
+
+```text
+/sdcard/telemetry.csv
 ```
 
-### Etapa 15 — Integração MQTT no ESP32
+o firmware passará a criar arquivos por sessão:
 
-Planejamento:
+```text
+/sdcard/TEL001.CSV
+/sdcard/TEL002.CSV
+/sdcard/TEL003.CSV
+```
 
-* conectar ESP32 ao Wi-Fi;
-* publicar dados GPS em JSON;
-* enviar telemetria para o Mosquitto;
-* integrar com Node-RED.
+Assim, cada teste com power bank terá seu próprio arquivo.
 
-### Etapa 16 — Dashboard no Node-RED
+### Comando `status`
 
-Planejamento:
+Mostrará informações do microSD e da sessão atual:
 
-* velocidade atual;
-* velocidade máxima;
-* distância percorrida;
-* tempo parado;
-* tempo em movimento;
-* status do veículo;
-* satélites;
-* estado do fix GPS.
+```text
+status
+```
 
-### Etapa 17 — Banco de Dados
+Informações previstas:
 
-Planejamento:
+* microSD pronto;
+* arquivo atual;
+* último arquivo anterior;
+* número de linhas gravadas;
+* tamanho do arquivo;
+* comandos disponíveis.
 
-* SQLite;
-* histórico de pontos GPS;
-* histórico de telemetria;
-* consulta das últimas leituras;
-* preparação para mapa.
+### Comando `list`
 
-### Etapa 18 — Mapa e Rota
+Listará os arquivos de sessão existentes no microSD:
 
-Planejamento:
+```text
+list
+```
 
-* exibir última posição;
-* exibir rota percorrida;
-* visualizar deslocamento em mapa;
-* integrar com dados armazenados.
+### Comando `export last`
+
+Após um teste com power bank, ao conectar o ESP32 no notebook, ele reinicia e cria uma nova sessão. O teste anterior poderá ser exportado com:
+
+```text
+export last
+```
+
+### Comando `clear` seguro
+
+O comando `clear` não apagará nada diretamente. Ele apenas exibirá um aviso.
+
+Para limpar de fato somente a sessão atual, será necessário digitar:
+
+```text
+clear confirm
+```
+
+Isso evita apagar dados de campo por acidente.
 
 ---
 
@@ -811,19 +1026,18 @@ Planejamento:
 
 ```text
 I TELEMETRY: ============== TELEMETRIA VEICULAR =============
-I TELEMETRY: Status: EM MOVIMENTO
-I TELEMETRY: UTC: 192516.000
+I TELEMETRY: Status: MOVING
+I TELEMETRY: UTC: 202154.000
 I TELEMETRY: Latitude: -21.540XXX
 I TELEMETRY: Longitude: -49.841XXX
-I TELEMETRY: Velocidade atual: 3.93 km/h
-I TELEMETRY: Velocidade maxima: 6.87 km/h
-I TELEMETRY: Velocidade media: 4.12 km/h
-I TELEMETRY: Distancia percorrida: 13.73 m
-I TELEMETRY: Tempo parado: 97 s
-I TELEMETRY: Tempo em movimento: 12 s
-I TELEMETRY: Amostras validas: 70
-I TELEMETRY: Satelites: 9
-I TELEMETRY: HDOP: 1.10
+I TELEMETRY: Velocidade atual: 12.35 km/h
+I TELEMETRY: Velocidade maxima: 12.35 km/h
+I TELEMETRY: Velocidade media: 3.97 km/h
+I TELEMETRY: Distancia percorrida: 22.07 m
+I TELEMETRY: Tempo parado: 230 s
+I TELEMETRY: Tempo em movimento: 20 s
+I TELEMETRY: Satelites: 15
+I TELEMETRY: HDOP: 0.70
 ```
 
 ---
@@ -842,16 +1056,23 @@ A etapa atual comprova pontos importantes do sistema embarcado:
 * arquitetura modular em C com ESP-IDF;
 * cálculo local de métricas de telemetria;
 * tratamento inicial de drift do GPS;
-* validação prática com movimentação real.
+* comunicação SPI com microSD;
+* gravação offline em CSV;
+* exportação serial posterior;
+* alimentação autônoma por power bank;
+* validação prática em campo.
 
-O projeto agora já demonstra competências importantes para firmware embarcado:
+O projeto agora demonstra competências importantes para firmware embarcado:
 
 * integração de sensor real;
 * leitura serial;
 * parser de protocolo;
 * organização modular;
 * cálculo embarcado;
-* análise de comportamento físico do sensor;
+* armazenamento local;
+* tratamento de falha de comunicação;
+* validação em bancada;
+* validação em campo;
 * documentação técnica baseada em testes reais.
 
 ---
@@ -868,10 +1089,13 @@ Projeto desenvolvido com foco em aprendizado e portfólio profissional nas área
 * ESP-IDF;
 * IoT;
 * UART;
+* SPI;
 * GPS;
 * Parser NMEA;
+* microSD;
 * Telemetria veicular;
 * Linux;
 * Docker;
 * MQTT;
-* Validação de hardware com analisador lógico.
+* Validação de hardware com analisador lógico;
+* Testes de campo com hardware real.
