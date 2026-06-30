@@ -10,6 +10,7 @@
 #include "gps_uart.h"
 #include "nmea_parser.h"
 #include "telemetry.h"
+#include "sdcard_logger.h"
 
 static const char *TAG = "GPS_APP";
 
@@ -28,7 +29,7 @@ static bool is_rmc_sentence(const char *sentence)
 void app_main(void)
 {
     ESP_LOGI(TAG, "Inicializando projeto de telemetria GPS com ESP-IDF");
-    ESP_LOGI(TAG, "Etapa atual: calculo de telemetria veicular embarcada");
+    ESP_LOGI(TAG, "Etapa atual: telemetria veicular com gravacao em microSD");
 
     gps_uart_init();
 
@@ -37,6 +38,14 @@ void app_main(void)
 
     telemetry_data_t telemetry;
     telemetry_init(&telemetry);
+
+    bool sd_ready = sdcard_logger_init();
+
+    if (sd_ready) {
+        ESP_LOGI(TAG, "microSD pronto para gravacao de telemetria");
+    } else {
+        ESP_LOGW(TAG, "microSD indisponivel. Sistema continuara apenas com logs no terminal.");
+    }
 
     char nmea_line[GPS_LINE_MAX_LEN];
 
@@ -56,7 +65,7 @@ void app_main(void)
             continue;
         }
 
-        ESP_LOGI(TAG, "NMEA: %s", nmea_line);
+        ESP_LOGD(TAG, "NMEA: %s", nmea_line);
 
         bool parsed = nmea_parse_sentence(nmea_line, &gps);
 
@@ -71,10 +80,15 @@ void app_main(void)
             if (is_rmc_sentence(nmea_line)) {
                 bool telemetry_updated = telemetry_update(&telemetry, &gps);
 
-                if (telemetry_updated &&
-                    ((now_ms - last_telemetry_log_ms) >= TELEMETRY_LOG_INTERVAL_MS)) {
-                    telemetry_log_status(&telemetry, &gps);
-                    last_telemetry_log_ms = now_ms;
+                if (telemetry_updated) {
+                    if (sdcard_logger_is_ready()) {
+                        sdcard_logger_log(&gps, &telemetry);
+                    }
+
+                    if ((now_ms - last_telemetry_log_ms) >= TELEMETRY_LOG_INTERVAL_MS) {
+                        telemetry_log_status(&telemetry, &gps);
+                        last_telemetry_log_ms = now_ms;
+                    }
                 }
             }
         } else {

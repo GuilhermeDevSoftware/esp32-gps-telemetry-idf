@@ -4,8 +4,17 @@ idf_component_register(
         "gps/gps_uart.c"
         "gps/nmea_parser.c"
         "telemetry/telemetry.c"
+        "storage/sdcard_logger.c"
     INCLUDE_DIRS
         "."
         "gps"
         "telemetry"
+        "storage"
+    REQUIRES
+        esp_timer
+        esp_driver_uart
+        esp_driver_gpio
+        esp_driver_sdspi
+        fatfs
+        sdmmc
 )
