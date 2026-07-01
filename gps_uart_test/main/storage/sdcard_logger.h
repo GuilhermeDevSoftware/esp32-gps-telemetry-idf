@@ -1,5 +1,4 @@
-#ifndef SDCARD_LOGGER_H
-#define SDCARD_LOGGER_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -16,7 +15,17 @@
 
 bool sdcard_logger_init(void);
 bool sdcard_logger_is_ready(void);
-bool sdcard_logger_log(const gps_data_t *gps, const telemetry_data_t *telemetry);
-bool sdcard_logger_export_csv_to_stdout(void);
 
-#endif
+bool sdcard_logger_log(const gps_data_t *gps, const telemetry_data_t *telemetry);
+
+bool sdcard_logger_session_init(void);
+bool sdcard_logger_new_session(void);
+
+const char *sdcard_logger_get_current_file(void);
+
+bool sdcard_logger_export_csv_to_stdout(void);
+bool sdcard_logger_export_last_to_stdout(void);
+bool sdcard_logger_export_legacy_to_stdout(void);
+
+void sdcard_logger_handle_command(const char *command);
+void sdcard_logger_print_help(void);
