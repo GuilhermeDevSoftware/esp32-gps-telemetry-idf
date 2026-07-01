@@ -745,19 +745,85 @@ static void normalize_command(const char *input, char *output, size_t output_siz
     }
 }
 
+static bool parse_export_session_command(const char *cmd, int *session_number)
+{
+    if (cmd == NULL || session_number == NULL) {
+        return false;
+    }
+
+    const char *number_text = NULL;
+
+    if (strncmp(cmd, "export session ", 15) == 0) {
+        number_text = cmd + 15;
+    } else if (strncmp(cmd, "export ", 7) == 0) {
+        number_text = cmd + 7;
+    } else {
+        return false;
+    }
+
+    if (number_text[0] == '\0') {
+        return false;
+    }
+
+    for (size_t i = 0; number_text[i] != '\0'; i++) {
+        if (!isdigit((unsigned char)number_text[i])) {
+            return false;
+        }
+    }
+
+    int value = atoi(number_text);
+
+    if (value <= 0) {
+        return false;
+    }
+
+    *session_number = value;
+    return true;
+}
+
+static bool sdcard_logger_export_session_to_stdout(int session_number)
+{
+    if (!sdcard_logger_is_ready()) {
+        ESP_LOGW(TAG, "microSD indisponivel. Nao foi possivel exportar sessao.");
+        return false;
+    }
+
+    if (session_number <= 0) {
+        printf("\nSessao invalida: %d\n\n", session_number);
+        return false;
+    }
+
+    char path[SDCARD_SESSION_PATH_MAX] = {0};
+
+    make_session_path(session_number, path, sizeof(path));
+
+    if (!file_exists(path)) {
+        printf("\nSessao nao encontrada: %s\n\n", path);
+        return false;
+    }
+
+    char label[32];
+
+    snprintf(label, sizeof(label), "SESSION_%03d", session_number);
+
+    return export_file_to_stdout(path, label);
+}
+
 void sdcard_logger_print_help(void)
 {
     printf("\n");
     printf("========== COMANDOS MICROSD ==========\n");
-    printf("status         -> mostra arquivo atual, ultimo arquivo, linhas e tamanho\n");
-    printf("list           -> lista sessoes salvas no microSD\n");
-    printf("new            -> cria nova sessao manualmente\n");
-    printf("export         -> exporta sessao atual\n");
-    printf("export last    -> exporta a sessao anterior\n");
-    printf("export legacy  -> exporta o antigo /sdcard/telemetry.csv\n");
-    printf("clear          -> nao apaga; apenas avisa\n");
-    printf("clear confirm  -> limpa somente a sessao atual, com cabecalho novo\n");
-    printf("help           -> mostra esta ajuda\n");
+    printf("status             -> mostra arquivo atual, ultimo arquivo, linhas e tamanho\n");
+    printf("list               -> lista sessoes salvas no microSD\n");
+    printf("new                -> cria nova sessao manualmente\n");
+    printf("export             -> exporta sessao atual\n");
+    printf("export last        -> exporta a sessao anterior\n");
+    printf("export legacy      -> exporta o antigo /sdcard/telemetry.csv\n");
+    printf("export 009         -> exporta uma sessao especifica\n");
+    printf("export session 009 -> exporta uma sessao especifica\n");
+    printf("clear              -> nao apaga; apenas avisa\n");
+    printf("clear confirm      -> limpa somente a sessao atual, com cabecalho novo\n");
+    printf("help               -> mostra esta ajuda\n");
     printf("======================================\n\n");
 }
 
@@ -787,18 +853,24 @@ void sdcard_logger_handle_command(const char *command)
         sdcard_logger_export_last_to_stdout();
     } else if (strcmp(cmd, "export legacy") == 0) {
         sdcard_logger_export_legacy_to_stdout();
-    } else if (strcmp(cmd, "clear") == 0) {
-        printf("\n");
-        printf("Comando bloqueado por seguranca.\n");
-        printf("Nada foi apagado.\n");
-        printf("Para limpar SOMENTE a sessao atual, digite:\n");
-        printf("clear confirm\n\n");
-    } else if (strcmp(cmd, "clear confirm") == 0) {
-        clear_current_session();
-    } else if (strcmp(cmd, "help") == 0) {
-        sdcard_logger_print_help();
     } else {
-        printf("\nComando desconhecido: %s\n", cmd);
-        printf("Digite 'help' para ver os comandos disponiveis.\n\n");
+        int session_number = 0;
+
+        if (parse_export_session_command(cmd, &session_number)) {
+            sdcard_logger_export_session_to_stdout(session_number);
+        } else if (strcmp(cmd, "clear") == 0) {
+            printf("\n");
+            printf("Comando bloqueado por seguranca.\n");
+            printf("Nada foi apagado.\n");
+            printf("Para limpar SOMENTE a sessao atual, digite:\n");
+            printf("clear confirm\n\n");
+        } else if (strcmp(cmd, "clear confirm") == 0) {
+            clear_current_session();
+        } else if (strcmp(cmd, "help") == 0) {
+            sdcard_logger_print_help();
+        } else {
+            printf("\nComando desconhecido: %s\n", cmd);
+            printf("Digite 'help' para ver os comandos disponiveis.\n\n");
+        }
     }
 }
