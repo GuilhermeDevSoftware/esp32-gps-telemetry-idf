@@ -8,3 +8,13 @@ mosquitto/log/
 nodered/
 **/build/
 **/sdkconfig.old
+
+
+# Python GPS analyzer - personal GPS data
+tools/gps_analyzer/data/*.csv
+tools/gps_analyzer/reports/*
+!tools/gps_analyzer/data/.gitkeep
+!tools/gps_analyzer/reports/.gitkeep
+
+# Python virtual environment
+.venv/
