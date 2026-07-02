@@ -2,11 +2,11 @@
 #define MQTT_PUBLISHER_H
 
 #include "esp_err.h"
-#include <stdbool.h>
+#include "gps_uart.h"
+#include "telemetry.h"
 
 esp_err_t mqtt_publisher_start(void);
-esp_err_t mqtt_publisher_publish(const char *topic, const char *payload);
 esp_err_t mqtt_publisher_publish_status(const char *status);
-bool mqtt_publisher_is_connected(void);
+esp_err_t mqtt_publisher_publish_gps_data(const gps_data_t *gps, const telemetry_data_t *telemetry);
 
 #endif

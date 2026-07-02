@@ -4,7 +4,7 @@ idf_component_register(
         "gps/gps_uart.c"
         "gps/nmea_parser.c"
         "telemetry/telemetry.c"
-        "telemetry/mqtt_publisher.c"
+	"network/mqtt_publisher.c"
         "storage/sdcard_logger.c"
         "network/wifi_manager.c"
 

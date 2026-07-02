@@ -5,7 +5,8 @@
 #include <fcntl.h>
 
 #include "wifi_manager.h"
-#include "mqtt_publisher.h"
+#include "network/mqtt_publisher.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -21,6 +22,7 @@ static const char *TAG = "GPS_APP";
 
 #define GPS_LOG_INTERVAL_MS        5000
 #define TELEMETRY_LOG_INTERVAL_MS  5000
+#define MQTT_PUBLISH_INTERVAL_MS   5000
 #define NO_NMEA_LOG_INTERVAL_MS    5000
 #define SERIAL_CMD_MAX_LEN         96
 
@@ -80,23 +82,23 @@ static void check_serial_command(void)
 
 void app_main(void)
 {
-
-	ESP_LOGI("APP", "Inicializando Wi-Fi e MQTT...");
-
-	if (wifi_manager_start() == ESP_OK) {
-    		ESP_LOGI("APP", "Wi-Fi conectado. Iniciando MQTT...");
-
-    	if (mqtt_publisher_start() == ESP_OK) {
-        	vTaskDelay(pdMS_TO_TICKS(3000));
-        	mqtt_publisher_publish_status("esp32_mqtt_ok");
-    	} else {
-        	ESP_LOGE("APP", "Falha ao iniciar MQTT");
-    }
-	} else {
-    ESP_LOGE("APP", "Falha ao iniciar Wi-Fi");
-}
     ESP_LOGI(TAG, "Inicializando projeto de telemetria GPS com ESP-IDF");
-    ESP_LOGI(TAG, "Etapa atual: microSD logger com sessoes, status, list, export e clear seguro");
+    ESP_LOGI(TAG, "Etapa atual: GPS + microSD logger + Wi-Fi + MQTT publisher");
+
+    ESP_LOGI("APP", "Inicializando Wi-Fi e MQTT...");
+
+    if (wifi_manager_start() == ESP_OK) {
+        ESP_LOGI("APP", "Wi-Fi conectado. Iniciando MQTT...");
+
+        if (mqtt_publisher_start() == ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(3000));
+            mqtt_publisher_publish_status("esp32_mqtt_ok");
+        } else {
+            ESP_LOGE("APP", "Falha ao iniciar MQTT");
+        }
+    } else {
+        ESP_LOGE("APP", "Falha ao iniciar Wi-Fi");
+    }
 
     console_input_init();
 
@@ -124,6 +126,7 @@ void app_main(void)
 
     int64_t last_gps_log_ms = 0;
     int64_t last_telemetry_log_ms = 0;
+    int64_t last_mqtt_publish_ms = 0;
     int64_t last_waiting_log_ms = 0;
     int64_t last_no_nmea_log_ms = 0;
 
@@ -166,6 +169,11 @@ void app_main(void)
                 if (telemetry_updated) {
                     if (sdcard_logger_is_ready()) {
                         sdcard_logger_log(&gps, &telemetry);
+                    }
+
+                    if ((now_ms - last_mqtt_publish_ms) >= MQTT_PUBLISH_INTERVAL_MS) {
+                        mqtt_publisher_publish_gps_data(&gps, &telemetry);
+                        last_mqtt_publish_ms = now_ms;
                     }
 
                     if ((now_ms - last_telemetry_log_ms) >= TELEMETRY_LOG_INTERVAL_MS) {
