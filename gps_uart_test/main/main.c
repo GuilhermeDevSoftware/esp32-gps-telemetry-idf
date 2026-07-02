@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "wifi_manager.h"
+#include "mqtt_publisher.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -78,6 +80,21 @@ static void check_serial_command(void)
 
 void app_main(void)
 {
+
+	ESP_LOGI("APP", "Inicializando Wi-Fi e MQTT...");
+
+	if (wifi_manager_start() == ESP_OK) {
+    		ESP_LOGI("APP", "Wi-Fi conectado. Iniciando MQTT...");
+
+    	if (mqtt_publisher_start() == ESP_OK) {
+        	vTaskDelay(pdMS_TO_TICKS(3000));
+        	mqtt_publisher_publish_status("esp32_mqtt_ok");
+    	} else {
+        	ESP_LOGE("APP", "Falha ao iniciar MQTT");
+    }
+	} else {
+    ESP_LOGE("APP", "Falha ao iniciar Wi-Fi");
+}
     ESP_LOGI(TAG, "Inicializando projeto de telemetria GPS com ESP-IDF");
     ESP_LOGI(TAG, "Etapa atual: microSD logger com sessoes, status, list, export e clear seguro");
 

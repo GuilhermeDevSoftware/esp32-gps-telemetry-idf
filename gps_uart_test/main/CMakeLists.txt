@@ -4,12 +4,18 @@ idf_component_register(
         "gps/gps_uart.c"
         "gps/nmea_parser.c"
         "telemetry/telemetry.c"
+        "telemetry/mqtt_publisher.c"
         "storage/sdcard_logger.c"
+        "network/wifi_manager.c"
+
     INCLUDE_DIRS
         "."
         "gps"
         "telemetry"
         "storage"
+        "network"
+        "config"
+
     REQUIRES
         esp_timer
         esp_driver_uart
@@ -17,4 +23,9 @@ idf_component_register(
         esp_driver_sdspi
         fatfs
         sdmmc
+        esp_wifi
+        esp_netif
+        esp_event
+        nvs_flash
+        mqtt
 )

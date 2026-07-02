@@ -1,0 +1,8 @@
+#ifndef TELEMETRY_CONFIG_EXAMPLE_H
+#define TELEMETRY_CONFIG_EXAMPLE_H
+
+#define WIFI_SSID        "NOME_DA_REDE"
+#define WIFI_PASSWORD    "SENHA_DA_REDE"
+#define MQTT_BROKER_URI  "mqtt://192.168.100.17:1883"
+
+#endif

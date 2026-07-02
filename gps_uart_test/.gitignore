@@ -1,0 +1,11 @@
+gps_uart_test/main/config/telemetry_config.h
+
+# Local secrets
+main/config/telemetry_config.h
+
+# ESP-IDF generated/dependency folders
+managed_components/
+build/
+
+# Local backup folders
+main_backup_before_modularizacao/
